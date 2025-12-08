@@ -38,14 +38,14 @@ echo OK
 echo.
 
 echo [4/6] Testing Python imports...
-python -c "import sys; sys.path.insert(0, '!SCRIPT_DIR!'); import watchdog; import yaml; import PIL; import numpy; import colorama; print('OK')" 2>&1
+python -c "import sys; sys.path.insert(0, '!SCRIPT_DIR!'); import watchdog; import yaml; import PIL; import numpy; import colorama; print('OK');" 2>&1
 if !ERRORLEVEL! NEQ 0 (
     echo ERROR: Missing required packages!
     echo Please run: pip install -r requirements.txt
     exit /b 1
 )
 
-python -c "import sys; sys.path.insert(0, '!SCRIPT_DIR!'); import rawpy; print('OK (rawpy available)')" 2>&1
+python -c "import sys; sys.path.insert(0, '!SCRIPT_DIR!'); import rawpy; print('OK (rawpy available)');" 2>&1
 if !ERRORLEVEL! NEQ 0 (
     echo WARNING: rawpy not available (RAW processing will be disabled)
     echo If you need RAW support, install rawpy or use Python 3.9-3.13
@@ -53,7 +53,7 @@ if !ERRORLEVEL! NEQ 0 (
 echo.
 
 echo [5/6] Testing config file...
-python -c "import sys; sys.path.insert(0, '!SCRIPT_DIR!'); import yaml; from pathlib import Path; config = yaml.safe_load(open('config.yaml')); print('Config OK'); print('  Watch folder:', config.get('watch_folder', 'NOT SET')); print('  Preset path:', config.get('preset_path', 'NOT SET'))" 2>&1
+python -c "import sys; sys.path.insert(0, '!SCRIPT_DIR!'); import yaml; from pathlib import Path; config = yaml.safe_load(open('config.yaml')); print('Config OK'); print('  Watch folder:', config.get('watch_folder', 'NOT SET')); print('  Preset path:', config.get('preset_path', 'NOT SET'));" 2>&1
 if !ERRORLEVEL! NEQ 0 (
     echo ERROR: Config file is invalid!
     exit /b 1
@@ -61,7 +61,7 @@ if !ERRORLEVEL! NEQ 0 (
 echo.
 
 echo [6/6] Testing main module import...
-python -c "import sys; sys.path.insert(0, '!SCRIPT_DIR!'); import main; print('OK')" 2>&1
+python -c "import sys; sys.path.insert(0, '!SCRIPT_DIR!'); import main; print('OK');" 2>&1
 if !ERRORLEVEL! NEQ 0 (
     echo ERROR: Cannot import main module!
     echo Check the error above for details.
