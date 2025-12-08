@@ -111,7 +111,9 @@ python3 main.py
    install_service.bat
    ```
 
-   Note: Windows requires NSSM (Non-Sucking Service Manager) or you can use Task Scheduler (instructions in the script)
+   **Detailed Windows installation instructions:** See [WINDOWS_INSTALL.md](WINDOWS_INSTALL.md) for step-by-step guide.
+   
+   Note: Windows requires NSSM (Non-Sucking Service Manager) or you can use Task Scheduler as an alternative.
 
 ## Configuration
 
