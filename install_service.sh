@@ -67,13 +67,35 @@ EOF
 echo "Created LaunchAgent plist: $PLIST_FILE"
 
 # Load the service
-if launchctl list "$SERVICE_NAME" &>/dev/null; then
+# Check if service is already loaded (try multiple methods for compatibility)
+SERVICE_LOADED=false
+if launchctl list "$SERVICE_NAME" &>/dev/null 2>&1; then
+    SERVICE_LOADED=true
+elif launchctl list "gui/$(id -u)/$SERVICE_NAME" &>/dev/null 2>&1; then
+    SERVICE_LOADED=true
+fi
+
+if [ "$SERVICE_LOADED" = true ]; then
     echo "Unloading existing service..."
+    # Try modern bootout command first (macOS 10.11+)
+    launchctl bootout "gui/$(id -u)/$SERVICE_NAME" 2>/dev/null || \
+    launchctl bootout "user/$(id -u)/$SERVICE_NAME" 2>/dev/null || \
+    # Fallback to legacy unload command (older macOS)
     launchctl unload "$PLIST_FILE" 2>/dev/null || true
+    sleep 1  # Give it a moment to unload
 fi
 
 echo "Loading service..."
-launchctl load "$PLIST_FILE"
+# Try modern bootstrap command first (macOS 10.11+)
+if launchctl bootstrap "gui/$(id -u)" "$PLIST_FILE" 2>/dev/null; then
+    echo "Service loaded using bootstrap (modern macOS)"
+elif launchctl bootstrap "user/$(id -u)" "$PLIST_FILE" 2>/dev/null; then
+    echo "Service loaded using bootstrap (user domain)"
+else
+    # Fallback to legacy load command (older macOS)
+    launchctl load "$PLIST_FILE"
+    echo "Service loaded using load (legacy macOS)"
+fi
 
 echo ""
 echo "Service installed successfully!"
@@ -82,10 +104,14 @@ echo "To check service status:"
 echo "  launchctl list | grep $SERVICE_NAME"
 echo ""
 echo "To unload the service:"
-echo "  launchctl unload $PLIST_FILE"
+echo "  launchctl bootout gui/\$(id -u)/$SERVICE_NAME"
+echo "  # Or: launchctl bootout $SERVICE_NAME"
+echo "  # Or (older macOS): launchctl unload $PLIST_FILE"
 echo ""
 echo "To remove the service:"
-echo "  launchctl unload $PLIST_FILE"
+echo "  launchctl bootout gui/\$(id -u)/$SERVICE_NAME"
+echo "  # Or: launchctl bootout $SERVICE_NAME"
+echo "  # Or (older macOS): launchctl unload $PLIST_FILE"
 echo "  rm $PLIST_FILE"
 echo ""
 echo "Logs are available at:"
