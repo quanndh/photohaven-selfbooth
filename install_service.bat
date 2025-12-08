@@ -60,6 +60,23 @@ if not exist "!SCRIPT_DIR!config.yaml" (
 echo Config file found.
 echo.
 
+REM Test if Python can import the script (quick check)
+echo Testing Python script...
+cd /d "!SCRIPT_DIR!"
+"!PYTHON_PATH!" -c "import sys; import os; sys.path.insert(0, os.path.dirname(os.path.abspath('main.py'))); import main" >nul 2>&1
+if !ERRORLEVEL! NEQ 0 (
+    echo WARNING: Python script test failed!
+    echo This may cause the service to fail to start.
+    echo.
+    echo Please ensure:
+    echo   1. All dependencies are installed: pip install -r requirements.txt
+    echo   2. config.yaml exists and is valid
+    echo   3. Try running manually: python main.py
+    echo.
+    echo Press any key to continue anyway, or Ctrl+C to cancel...
+    pause >nul
+)
+
 REM Remove existing service if it exists
 echo Removing existing service if present...
 nssm stop !SERVICE_NAME! >nul 2>&1
@@ -81,8 +98,6 @@ nssm set !SERVICE_NAME! Description "Applies Lightroom presets to images automat
 nssm set !SERVICE_NAME! Start SERVICE_AUTO_START
 nssm set !SERVICE_NAME! AppStdout "!SCRIPT_DIR!service_output.log"
 nssm set !SERVICE_NAME! AppStderr "!SCRIPT_DIR!service_error.log"
-nssm set !SERVICE_NAME! AppExitAction Restart
-nssm set !SERVICE_NAME! AppRestartDelay 5000
 
 echo Service installed successfully!
 echo.
