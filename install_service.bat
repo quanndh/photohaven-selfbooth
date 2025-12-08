@@ -46,6 +46,19 @@ REM Remove existing service if it exists
 nssm stop !SERVICE_NAME! >nul 2>&1
 nssm remove !SERVICE_NAME! confirm >nul 2>&1
 
+REM Test if Python can run the script first
+echo Testing Python script...
+"!PYTHON_PATH!" -c "import sys; sys.path.insert(0, '!SCRIPT_DIR!'); import main" >nul 2>&1
+if !ERRORLEVEL! NEQ 0 (
+    echo.
+    echo WARNING: Python script test failed. This may cause the service to fail.
+    echo Please check that all dependencies are installed:
+    echo   pip install -r requirements.txt
+    echo.
+    echo Press any key to continue anyway, or Ctrl+C to cancel...
+    pause >nul
+)
+
 REM Install service
 echo Installing service...
 nssm install !SERVICE_NAME! "!PYTHON_PATH!" "!SCRIPT_DIR!main.py"
@@ -55,10 +68,37 @@ nssm set !SERVICE_NAME! Description "Applies Lightroom presets to images automat
 nssm set !SERVICE_NAME! Start SERVICE_AUTO_START
 nssm set !SERVICE_NAME! AppStdout "!SCRIPT_DIR!service_output.log"
 nssm set !SERVICE_NAME! AppStderr "!SCRIPT_DIR!service_error.log"
+nssm set !SERVICE_NAME! AppExitAction Restart
+nssm set !SERVICE_NAME! AppRestartDelay 5000
 
 REM Start service
 echo Starting service...
+timeout /t 2 >nul
 nssm start !SERVICE_NAME!
+
+REM Wait a moment and check status
+timeout /t 3 >nul
+nssm status !SERVICE_NAME! >nul 2>&1
+if !ERRORLEVEL! NEQ 0 (
+    echo.
+    echo ERROR: Service failed to start!
+    echo.
+    echo Please check the error logs:
+    echo   type "!SCRIPT_DIR!service_error.log"
+    echo.
+    echo Common issues:
+    echo   1. Missing dependencies - run: pip install -r requirements.txt
+    echo   2. Config file missing or invalid - check config.yaml
+    echo   3. Preset file not found - check preset_path in config.yaml
+    echo   4. Watch folder path invalid - check watch_folder in config.yaml
+    echo.
+    echo Try running manually first:
+    echo   cd "!SCRIPT_DIR!"
+    echo   python main.py
+    echo.
+) else (
+    echo Service started successfully!
+)
 
 echo.
 echo Service installed successfully!

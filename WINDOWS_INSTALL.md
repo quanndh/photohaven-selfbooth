@@ -216,26 +216,67 @@ You can view them with any text editor or Notepad.
 
 ## Troubleshooting
 
-### Service Won't Start
+### Service Won't Start (SERVICE_STOPPED error)
 
-1. Check if Python is in PATH:
+This error means the service starts but immediately stops, usually due to a startup error.
 
+**Step 1: Check the error logs**
+
+```cmd
+type service_error.log
+type service_output.log
+```
+
+**Step 2: Test the application manually**
+
+Run the application directly to see the actual error:
+
+```cmd
+cd C:\path\to\self_booth_1
+python main.py
+```
+
+**Step 3: Common causes and fixes**
+
+1. **Missing Python dependencies:**
+   ```cmd
+   pip install -r requirements.txt
+   ```
+   If `rawpy` fails to install (Python 3.14+), either:
+   - Use Python 3.9-3.13, or
+   - Set `raw_processing: false` in `config.yaml` and skip rawpy
+
+2. **Config file issues:**
+   - Ensure `config.yaml` exists in the project directory
+   - Check that `watch_folder` and `preset_path` are correct
+   - Verify paths exist (or can be created)
+
+3. **Preset file not found:**
+   - Check that the `preset_path` in `config.yaml` points to a valid `.xmp` file
+   - Use absolute paths if relative paths don't work
+
+4. **Python not found:**
    ```cmd
    python --version
+   where python
    ```
+   If Python is not found, reinstall Python and ensure it's added to PATH
 
-2. Check if the config.yaml file exists and is valid
+5. **Permission issues:**
+   - Ensure the service account has read/write access to:
+     - Project directory
+     - Watch folder
+     - Output folders
 
-3. Check service logs:
+**Step 4: Reinstall the service**
 
-   ```cmd
-   type service_error.log
-   ```
+After fixing issues, reinstall:
 
-4. Try running the application manually first:
-   ```cmd
-   python main.py
-   ```
+```cmd
+nssm stop LightroomPresetProcessor
+nssm remove LightroomPresetProcessor confirm
+install_service.bat
+```
 
 ### Service Starts But Doesn't Process Images
 
