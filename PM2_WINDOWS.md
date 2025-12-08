@@ -51,15 +51,45 @@ This ensures PM2 remembers your processes:
 pm2 save
 ```
 
-### Step 5: Enable Auto-Start on Boot
+### Step 5: Enable Auto-Start on Boot (Windows)
 
-Run this command as Administrator:
+PM2's built-in `startup` command doesn't work on Windows. Use Windows Task Scheduler instead:
 
-```cmd
-pm2 startup
-```
+1. **Open Task Scheduler:**
+   - Press `Win + R`
+   - Type `taskschd.msc` and press Enter
 
-It will output a command like `pm2-startup install`. Copy and run that command as Administrator.
+2. **Create Basic Task:**
+   - Click "Create Basic Task" in the right panel
+   - Name: `PM2 Startup`
+   - Description: `Start PM2 processes on Windows boot`
+   - Click Next
+
+3. **Set Trigger:**
+   - Select "When the computer starts"
+   - Click Next
+
+4. **Set Action:**
+   - Select "Start a program"
+   - Click Next
+   - Program/script: `pm2` (or full path: `C:\Users\YourName\AppData\Roaming\npm\pm2.cmd`)
+   - Add arguments: `resurrect`
+   - Start in: `C:\path\to\self_booth_1` (your project directory)
+   - Click Next
+
+5. **Finish:**
+   - Check "Open the Properties dialog for this task when I click Finish"
+   - Click Finish
+
+6. **Configure Additional Settings:**
+   - In Properties dialog:
+     - **General tab**: Check "Run whether user is logged on or not"
+     - **General tab**: Check "Run with highest privileges"
+     - **Conditions tab**: Uncheck "Start the task only if the computer is on AC power" (optional)
+     - **Settings tab**: Select "If the task fails, restart every: 1 minute"
+     - Click OK
+
+Now PM2 will automatically start and restore your processes when Windows boots.
 
 ## Managing the Application
 
@@ -196,8 +226,19 @@ npm install -g pm2
 ### Auto-Start Not Working
 
 1. Make sure you ran `pm2 save` after starting the process
-2. Make sure you ran the `pm2 startup` command as Administrator
-3. Check Windows Task Scheduler for the PM2 startup task
+2. Verify the Task Scheduler task exists:
+   - Open Task Scheduler (`Win + R`, type `taskschd.msc`)
+   - Look for "PM2 Startup" task
+   - Check if it's enabled
+3. Test the task manually:
+   - Right-click "PM2 Startup" → Run
+   - Check if PM2 processes start: `pm2 list`
+4. Check Task Scheduler history:
+   - Right-click "PM2 Startup" → Properties → History tab
+   - Look for any errors
+5. Verify PM2 path in Task Scheduler:
+   - Make sure the `pm2` command path is correct
+   - Try using full path: `C:\Users\YourName\AppData\Roaming\npm\pm2.cmd`
 
 ## Advantages of PM2
 
@@ -217,9 +258,9 @@ To remove PM2:
 npm uninstall -g pm2
 ```
 
-To remove the startup task, run as Administrator:
+To remove the startup task:
 
-```cmd
-pm2-startup uninstall
-```
+1. Open Task Scheduler (`Win + R`, type `taskschd.msc`)
+2. Find "PM2 Startup" task
+3. Right-click → Delete
 
