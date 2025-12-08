@@ -226,6 +226,21 @@ class ImageProcessor:
         if temperature != 0.0 or tint != 0.0:
             img_array = self._apply_white_balance(img_array, temperature, tint)
         
+        # Apply tone curves (if present)
+        # Tone curves are applied after other adjustments
+        tone_curve = self.adjustments.get('ToneCurve')
+        if tone_curve:
+            img_array = self._apply_tone_curve(img_array, tone_curve)
+        
+        # Apply per-channel tone curves if present
+        tone_curve_red = self.adjustments.get('ToneCurveRed')
+        tone_curve_green = self.adjustments.get('ToneCurveGreen')
+        tone_curve_blue = self.adjustments.get('ToneCurveBlue')
+        if tone_curve_red or tone_curve_green or tone_curve_blue:
+            img_array = self._apply_channel_tone_curves(
+                img_array, tone_curve_red, tone_curve_green, tone_curve_blue
+            )
+        
         # Convert back to PIL Image
         img_array = np.clip(img_array, 0, 1)
         
@@ -425,6 +440,142 @@ class ImageProcessor:
         rgb[mask5, 2] = x[mask5] + m[mask5]
         
         return np.clip(rgb, 0, 1)
+    
+    def _apply_tone_curve(self, img: np.ndarray, tone_curve: list) -> np.ndarray:
+        """Apply tone curve to image
+        
+        Args:
+            img: Image array (0-1 range)
+            tone_curve: List of (x, y) coordinate pairs defining the curve
+            
+        Returns:
+            Image array with tone curve applied
+        """
+        if not tone_curve or len(tone_curve) < 2:
+            return img
+        
+        # Convert tone curve points to numpy arrays
+        # Tone curves in Lightroom are typically in 0-255 range
+        x_coords = np.array([p[0] for p in tone_curve])
+        y_coords = np.array([p[1] for p in tone_curve])
+        
+        # Normalize to 0-1 range if needed
+        if x_coords.max() > 1.0 or y_coords.max() > 1.0:
+            x_coords = x_coords / 255.0
+            y_coords = y_coords / 255.0
+        
+        # Create interpolation function
+        # Use linear interpolation between curve points
+        # For values outside the curve range, use nearest point
+        try:
+            from scipy.interpolate import interp1d
+        except ImportError:
+            # Fallback to numpy-based interpolation if scipy not available
+            logger.warning("scipy not available, using simple tone curve interpolation")
+            return self._apply_tone_curve_simple(img, tone_curve)
+        
+        # Ensure curve is monotonic for interpolation
+        # Sort by x coordinate
+        sort_idx = np.argsort(x_coords)
+        x_coords = x_coords[sort_idx]
+        y_coords = y_coords[sort_idx]
+        
+        # Create interpolation function
+        # Use 'linear' interpolation, with 'nearest' for extrapolation
+        try:
+            interp_func = interp1d(
+                x_coords, y_coords,
+                kind='linear',
+                bounds_error=False,
+                fill_value=(y_coords[0], y_coords[-1])
+            )
+        except:
+            # Fallback to simple linear interpolation
+            return img
+        
+        # Apply tone curve to each channel
+        result = np.zeros_like(img)
+        for c in range(img.shape[2]):
+            channel = img[:, :, c]
+            # Apply curve
+            result[:, :, c] = np.clip(interp_func(channel), 0, 1)
+        
+        return result
+    
+    def _apply_channel_tone_curves(
+        self, img: np.ndarray,
+        curve_red: Optional[list],
+        curve_green: Optional[list],
+        curve_blue: Optional[list]
+    ) -> np.ndarray:
+        """Apply per-channel tone curves to image
+        
+        Args:
+            img: Image array (0-1 range)
+            curve_red: Red channel tone curve (list of (x, y) pairs)
+            curve_green: Green channel tone curve
+            curve_blue: Blue channel tone curve
+            
+        Returns:
+            Image array with channel tone curves applied
+        """
+        result = img.copy()
+        
+        # Apply each channel curve independently
+        if curve_red:
+            red_channel = img[:, :, 0:1]
+            result[:, :, 0] = self._apply_tone_curve(red_channel, curve_red)[:, :, 0]
+        if curve_green:
+            green_channel = img[:, :, 1:2]
+            result[:, :, 1] = self._apply_tone_curve(green_channel, curve_green)[:, :, 0]
+        if curve_blue:
+            blue_channel = img[:, :, 2:3]
+            result[:, :, 2] = self._apply_tone_curve(blue_channel, curve_blue)[:, :, 0]
+        
+        return result
+    
+    def _apply_tone_curve_simple(self, img: np.ndarray, tone_curve: list) -> np.ndarray:
+        """Simple tone curve application without scipy (fallback)"""
+        if not tone_curve or len(tone_curve) < 2:
+            return img
+        
+        # Convert to numpy arrays and normalize
+        x_coords = np.array([p[0] for p in tone_curve])
+        y_coords = np.array([p[1] for p in tone_curve])
+        
+        if x_coords.max() > 1.0 or y_coords.max() > 1.0:
+            x_coords = x_coords / 255.0
+            y_coords = y_coords / 255.0
+        
+        # Sort by x
+        sort_idx = np.argsort(x_coords)
+        x_coords = x_coords[sort_idx]
+        y_coords = y_coords[sort_idx]
+        
+        # Simple linear interpolation using numpy
+        result = np.zeros_like(img)
+        for c in range(img.shape[2]):
+            channel = img[:, :, c]
+            # Find which segment each pixel value falls into
+            # Use searchsorted to find insertion points
+            indices = np.searchsorted(x_coords, channel, side='right')
+            indices = np.clip(indices, 1, len(x_coords) - 1)
+            
+            # Linear interpolation
+            x0 = x_coords[indices - 1]
+            x1 = x_coords[indices]
+            y0 = y_coords[indices - 1]
+            y1 = y_coords[indices]
+            
+            # Avoid division by zero
+            dx = x1 - x0
+            dx = np.where(dx == 0, 1, dx)
+            
+            # Interpolate
+            t = (channel - x0) / dx
+            result[:, :, c] = np.clip(y0 + t * (y1 - y0), 0, 1)
+        
+        return result
     
     def _apply_color_profile(self, image: Image.Image) -> Image.Image:
         """Apply color profile to image"""

@@ -103,6 +103,23 @@ class XMPPresetParser:
     
     def _convert_value(self, value: str) -> Any:
         """Convert string value to appropriate type"""
+        # Special handling for tone curves (comma-separated coordinate pairs)
+        if 'ToneCurve' in str(value) or (',' in value and ' ' in value):
+            # Check if it looks like a tone curve (coordinate pairs)
+            try:
+                parts = value.strip().split()
+                if len(parts) > 0:
+                    # Try to parse as coordinate pairs
+                    coords = []
+                    for part in parts:
+                        if ',' in part:
+                            x, y = part.split(',')
+                            coords.append((float(x), float(y)))
+                    if len(coords) > 0:
+                        return coords  # Return as list of tuples
+            except (ValueError, AttributeError):
+                pass  # Not a tone curve, continue with normal parsing
+        
         # Try boolean
         if value.lower() in ('true', '1', 'yes'):
             return True

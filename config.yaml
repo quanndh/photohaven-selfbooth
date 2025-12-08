@@ -13,7 +13,7 @@ watch_folder: "../watched"
 # and relative paths (e.g., "./presets/default.xmp" or "../presets/default.xmp")
 # Relative paths are resolved relative to this config file's directory
 # preset_path: "/Users/quanndh/Documents/job/self_booth_1/presets/default.xmp"
-preset_path: "../cali.xmp"
+preset_path: "../vista.xmp"
 # Example relative path: "./presets/default.xmp" or "../presets/default.xmp"
 
 # Output format: "tiff" (16-bit, lossless) or "jpg" (with quality setting)
@@ -63,6 +63,6 @@ processing:
 
 # Logging
 logging:
-  level: "DEBUG" # DEBUG, INFO, WARNING, ERROR - Use DEBUG to see all file system events
+  level: "INFO" # DEBUG, INFO, WARNING, ERROR - Use DEBUG to see all file system events
   file: "preset_processor.log"
   console: true
