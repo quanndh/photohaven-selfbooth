@@ -121,7 +121,7 @@ timeout /t 1 >nul
 
 REM Install service
 echo Installing service...
-nssm install !SERVICE_NAME! "!PYTHON_PATH!" "!SCRIPT_DIR!main.py"
+nssm install !SERVICE_NAME! "!PYTHON_PATH!"
 if !ERRORLEVEL! NEQ 0 (
     echo ERROR: Failed to install service
     pause
@@ -129,6 +129,7 @@ if !ERRORLEVEL! NEQ 0 (
 )
 
 nssm set !SERVICE_NAME! AppDirectory "!SCRIPT_DIR!"
+nssm set !SERVICE_NAME! AppParameters "\"!SCRIPT_DIR!main.py\""
 nssm set !SERVICE_NAME! DisplayName "Lightroom Preset Auto-Processor"
 nssm set !SERVICE_NAME! Description "Applies Lightroom presets to images automatically"
 nssm set !SERVICE_NAME! Start SERVICE_AUTO_START
