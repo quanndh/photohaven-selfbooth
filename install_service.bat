@@ -14,15 +14,66 @@ echo Windows Service Installation
 echo ========================================
 echo.
 
-REM Find Python
-where python >nul 2>&1
-if !ERRORLEVEL! EQU 0 (
-    for /f "delims=" %%i in ('where python') do set "PYTHON_PATH=%%i"
+REM Find Python - avoid Microsoft Store shim
+echo Searching for Python installation...
+set "PYTHON_PATH="
+
+REM Check common Python installation locations first (most recent first)
+for %%v in (313 312 311 310 39) do (
+    if exist "C:\Python%%v\python.exe" (
+        set "PYTHON_PATH=C:\Python%%v\python.exe"
+        goto :python_found
+    )
+    if exist "C:\Program Files\Python%%v\python.exe" (
+        set "PYTHON_PATH=C:\Program Files\Python%%v\python.exe"
+        goto :python_found
+    )
 )
 
+REM Check user AppData (common for Python.org installers)
+if exist "%LOCALAPPDATA%\Programs\Python" (
+    for /f "delims=" %%i in ('dir /b /s "%LOCALAPPDATA%\Programs\Python\Python*\python.exe" 2^>nul ^| sort /r') do (
+        set "PYTHON_PATH=%%i"
+        goto :python_found
+    )
+)
+
+REM Check PATH but skip Microsoft Store shim
+for /f "delims=" %%i in ('where python 2^>nul') do (
+    echo %%i | findstr /i "WindowsApps" >nul
+    if !ERRORLEVEL! NEQ 0 (
+        REM Verify it's a real Python executable
+        "%%i" --version >nul 2>&1
+        if !ERRORLEVEL! EQU 0 (
+            set "PYTHON_PATH=%%i"
+            goto :python_found
+        )
+    )
+)
+
+:python_found
 if "!PYTHON_PATH!"=="" (
-    echo ERROR: Python not found in PATH
-    echo Please install Python 3.9 or later and add it to PATH
+    echo ERROR: Python not found
+    echo.
+    echo Please install Python 3.9 or later from python.org:
+    echo https://www.python.org/downloads/
+    echo.
+    echo Make sure to check "Add Python to PATH" during installation
+    echo.
+    pause
+    exit /b 1
+)
+
+REM Verify it's not the Microsoft Store shim
+echo !PYTHON_PATH! | findstr /i "WindowsApps" >nul
+if !ERRORLEVEL! EQU 0 (
+    echo ERROR: Found Microsoft Store Python shim, not a real installation
+    echo.
+    echo Please install Python from python.org instead:
+    echo https://www.python.org/downloads/
+    echo.
+    echo Or manually set PYTHON_PATH at the top of this script.
+    echo.
     pause
     exit /b 1
 )
