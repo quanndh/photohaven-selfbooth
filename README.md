@@ -107,13 +107,25 @@ python3 main.py
 
    **Windows:**
 
+   **Option 1 - PM2 (Recommended, easiest):**
+   ```cmd
+   install_pm2.bat
+   ```
+   Requires Node.js (downloads automatically if needed)
+
+   **Option 2 - Supervisor (Python-native):**
+   ```cmd
+   install_supervisor.bat
+   ```
+
+   **Option 3 - NSSM (Traditional Windows Service):**
    ```cmd
    install_service.bat
    ```
 
    **Detailed Windows installation instructions:** See [WINDOWS_INSTALL.md](WINDOWS_INSTALL.md) for step-by-step guide.
    
-   Note: Windows requires NSSM (Non-Sucking Service Manager) or you can use Task Scheduler as an alternative.
+   **Note:** PM2 is recommended as it's the simplest and most user-friendly option. NSSM requires additional setup.
 
 ## Configuration
 
