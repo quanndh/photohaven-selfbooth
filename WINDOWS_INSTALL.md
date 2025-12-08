@@ -1,104 +1,21 @@
 # Windows Service Installation Guide
 
-## Method 1: Using PM2 (Recommended - Easiest)
+## Method 1: Using PM2 (Recommended)
 
 PM2 is a popular process manager that works great with Python scripts. It's much simpler than NSSM and provides excellent monitoring and auto-restart capabilities.
 
-### Prerequisites
+**See [PM2_WINDOWS.md](PM2_WINDOWS.md) for complete installation and usage guide.**
 
-1. **Node.js installed** (required for PM2)
-   - Download from: https://nodejs.org/
-   - Install with default settings
-
-2. **Python 3.9+ installed**
-
-### Installation Steps
-
-1. Open Command Prompt (as Administrator recommended)
-2. Navigate to the project directory:
-   ```cmd
-   cd C:\path\to\self_booth_1
-   ```
-3. Run the PM2 installation script:
-   ```cmd
-   install_pm2.bat
-   ```
-
-The script will:
-- Install PM2 if not already installed
-- Find your Python installation
-- Start the application with PM2
-- Configure auto-restart on failure
-- Show you how to enable auto-start on Windows boot
-
-### Enable Auto-Start on Boot
-
-After installation, PM2 will show you a command to run. Execute it as Administrator:
-
-```cmd
-pm2 startup
-```
-
-Then run the command it outputs (something like `pm2-startup install`).
-
-### Managing the Application
-
-```cmd
-pm2 list                    # Show all processes
-pm2 logs lightroom-preset-processor  # View logs
-pm2 restart lightroom-preset-processor  # Restart
-pm2 stop lightroom-preset-processor    # Stop
-pm2 delete lightroom-preset-processor  # Remove
-pm2 monit                   # Monitor dashboard
-```
-
-### Advantages of PM2
-
-- ✅ Simple installation
-- ✅ Built-in monitoring dashboard
-- ✅ Automatic restart on failure
-- ✅ Easy log management
-- ✅ Works great with Python
-- ✅ Cross-platform (if you need it)
+Quick start:
+1. Install Node.js from https://nodejs.org/
+2. Install PM2: `npm install -g pm2`
+3. Start: `pm2 start python --name lightroom-preset-processor -- main.py`
+4. Save: `pm2 save`
+5. Enable auto-start: `pm2 startup` (run as Administrator)
 
 ---
 
-## Method 2: Using Supervisor (Python-Native)
-
-Supervisor is a Python-native process manager, similar to PM2 but written in Python.
-
-### Prerequisites
-
-1. **Python 3.9+ installed**
-
-### Installation Steps
-
-1. Open Command Prompt
-2. Navigate to the project directory:
-   ```cmd
-   cd C:\path\to\self_booth_1
-   ```
-3. Run the Supervisor installation script:
-   ```cmd
-   install_supervisor.bat
-   ```
-
-The script will:
-- Install supervisor if needed
-- Create a supervisor configuration
-- Start the application
-
-### Managing the Application
-
-```cmd
-supervisorctl -c supervisor\supervisord.conf status
-supervisorctl -c supervisor\supervisord.conf restart lightroom-preset-processor
-supervisorctl -c supervisor\supervisord.conf stop lightroom-preset-processor
-```
-
----
-
-## Method 3: Using NSSM (Traditional Windows Service)
+## Method 2: Using NSSM (Traditional Windows Service)
 
 ### Prerequisites
 
