@@ -1,0 +1,68 @@
+# Lightroom Preset Auto-Processor Configuration
+
+# Folder to watch for new subfolders
+# Supports both absolute paths (e.g., "/Users/name/Documents/watch")
+# and relative paths (e.g., "./watch" or "../watched")
+# Relative paths are resolved relative to this config file's directory
+# watch_folder: "/Users/quanndh/Documents/job/self_booth_1/watch"
+watch_folder: "../watched"
+# Example relative path: "./watch" or "../watched"
+
+# Path to the Lightroom preset file (.xmp)
+# Supports both absolute paths (e.g., "/Users/name/presets/default.xmp")
+# and relative paths (e.g., "./presets/default.xmp" or "../presets/default.xmp")
+# Relative paths are resolved relative to this config file's directory
+# preset_path: "/Users/quanndh/Documents/job/self_booth_1/presets/default.xmp"
+preset_path: "../cali.xmp"
+# Example relative path: "./presets/default.xmp" or "../presets/default.xmp"
+
+# Output format: "tiff" (16-bit, lossless) or "jpg" (with quality setting)
+output_format: "tiff"
+
+# JPEG quality (1-100, only used if output_format is "jpg")
+jpeg_quality: 95
+
+# Output subfolder name within each processed folder
+output_folder: "processed"
+
+# Enable RAW file processing (requires rawpy/libraw)
+raw_processing: true
+
+# Color profile to use: "sRGB", "AdobeRGB", "ProPhotoRGB", or "preserve" (keep original)
+color_profile: "sRGB"
+
+# Supported image extensions
+supported_extensions:
+  raw:
+    - ".cr2" # Canon
+    - ".nef" # Nikon
+    - ".arw" # Sony
+    - ".dng" # Adobe DNG
+    - ".raf" # Fujifilm
+    - ".orf" # Olympus
+    - ".rw2" # Panasonic
+    - ".cr3" # Canon (newer)
+  standard:
+    - ".jpg"
+    - ".jpeg"
+    - ".tif"
+    - ".tiff"
+    - ".png"
+
+# Processing settings
+processing:
+  # Debounce time in seconds (wait before processing after folder creation)
+  debounce_seconds: 2
+
+  # Maximum concurrent processing jobs
+  max_concurrent_jobs: 2
+
+  # Retry failed images
+  retry_failed: true
+  max_retries: 3
+
+# Logging
+logging:
+  level: "DEBUG" # DEBUG, INFO, WARNING, ERROR - Use DEBUG to see all file system events
+  file: "preset_processor.log"
+  console: true
