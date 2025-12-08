@@ -113,6 +113,11 @@ def load_config(config_path: str = 'config.yaml') -> dict:
 
 def main():
     """Main application entry point"""
+    # Change to script directory to ensure relative paths work
+    script_dir = Path(__file__).parent.resolve()
+    import os
+    os.chdir(script_dir)
+    
     print(f"{Fore.CYAN}{'='*60}")
     print(f"{Fore.CYAN}Lightroom Preset Auto-Processor")
     print(f"{Fore.CYAN}{'='*60}{Style.RESET_ALL}\n")
