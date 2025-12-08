@@ -37,9 +37,9 @@ if %ERRORLEVEL% NEQ 0 (
     echo   1. Open Task Scheduler
     echo   2. Create Basic Task
     echo   3. Set trigger to "When the computer starts"
-    echo   4. Set action to start program: %PYTHON_PATH%
-    echo   5. Add arguments: "%SCRIPT_DIR%main.py"
-    echo   6. Set start in: %SCRIPT_DIR%
+    echo   4. Set action to start program: [Use Python path from above]
+    echo   5. Add arguments: main.py
+    echo   6. Set start in: [Use script directory from above]
     echo.
     pause
     exit /b 1
