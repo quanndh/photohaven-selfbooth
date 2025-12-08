@@ -8,6 +8,12 @@ set "SCRIPT_DIR=%~dp0"
 set "SERVICE_NAME=LightroomPresetProcessor"
 set "PYTHON_PATH="
 
+echo ========================================
+echo Lightroom Preset Auto-Processor
+echo Windows Service Installation
+echo ========================================
+echo.
+
 REM Find Python
 where python >nul 2>&1
 if !ERRORLEVEL! EQU 0 (
@@ -15,22 +21,20 @@ if !ERRORLEVEL! EQU 0 (
 )
 
 if "!PYTHON_PATH!"=="" (
-    echo Error: Python not found in PATH
+    echo ERROR: Python not found in PATH
     echo Please install Python 3.9 or later and add it to PATH
     pause
     exit /b 1
 )
 
-echo Installing Lightroom Preset Auto-Processor as Windows Service...
-echo Python path: !PYTHON_PATH!
-echo Script directory: !SCRIPT_DIR!
+echo Python found: !PYTHON_PATH!
+python --version
 echo.
 
 REM Check if NSSM is available
 where nssm >nul 2>&1
 if !ERRORLEVEL! NEQ 0 (
-    echo.
-    echo NSSM is required to install as a Windows Service.
+    echo ERROR: NSSM is required to install as a Windows Service.
     echo.
     echo Please download NSSM from: https://nssm.cc/download
     echo Extract it and add the 64-bit or 32-bit folder to your PATH.
@@ -42,26 +46,35 @@ if !ERRORLEVEL! NEQ 0 (
     exit /b 1
 )
 
+echo NSSM found.
+echo.
+
+REM Check if config.yaml exists
+if not exist "!SCRIPT_DIR!config.yaml" (
+    echo ERROR: config.yaml not found in !SCRIPT_DIR!
+    echo Please create config.yaml before installing the service.
+    pause
+    exit /b 1
+)
+
+echo Config file found.
+echo.
+
 REM Remove existing service if it exists
+echo Removing existing service if present...
 nssm stop !SERVICE_NAME! >nul 2>&1
 nssm remove !SERVICE_NAME! confirm >nul 2>&1
-
-REM Test if Python can run the script first
-echo Testing Python script...
-"!PYTHON_PATH!" -c "import sys; sys.path.insert(0, '!SCRIPT_DIR!'); import main" >nul 2>&1
-if !ERRORLEVEL! NEQ 0 (
-    echo.
-    echo WARNING: Python script test failed. This may cause the service to fail.
-    echo Please check that all dependencies are installed:
-    echo   pip install -r requirements.txt
-    echo.
-    echo Press any key to continue anyway, or Ctrl+C to cancel...
-    pause >nul
-)
+timeout /t 1 >nul
 
 REM Install service
 echo Installing service...
 nssm install !SERVICE_NAME! "!PYTHON_PATH!" "!SCRIPT_DIR!main.py"
+if !ERRORLEVEL! NEQ 0 (
+    echo ERROR: Failed to install service
+    pause
+    exit /b 1
+)
+
 nssm set !SERVICE_NAME! AppDirectory "!SCRIPT_DIR!"
 nssm set !SERVICE_NAME! DisplayName "Lightroom Preset Auto-Processor"
 nssm set !SERVICE_NAME! Description "Applies Lightroom presets to images automatically"
@@ -71,55 +84,44 @@ nssm set !SERVICE_NAME! AppStderr "!SCRIPT_DIR!service_error.log"
 nssm set !SERVICE_NAME! AppExitAction Restart
 nssm set !SERVICE_NAME! AppRestartDelay 5000
 
+echo Service installed successfully!
+echo.
+
 REM Start service
 echo Starting service...
 timeout /t 2 >nul
 nssm start !SERVICE_NAME!
+timeout /t 2 >nul
 
-REM Wait a moment and check status
-timeout /t 3 >nul
+REM Check status
 nssm status !SERVICE_NAME! >nul 2>&1
-if !ERRORLEVEL! NEQ 0 (
+if !ERRORLEVEL! EQU 0 (
+    echo Service started successfully!
     echo.
-    echo ERROR: Service failed to start!
+    echo Service is running. Check logs if you encounter any issues:
+    echo   - service_output.log
+    echo   - service_error.log
+    echo   - preset_processor.log
+) else (
+    echo WARNING: Service may not have started properly.
     echo.
     echo Please check the error logs:
     echo   type "!SCRIPT_DIR!service_error.log"
     echo.
     echo Common issues:
-    echo   1. Missing dependencies - run: pip install -r requirements.txt
-    echo   2. Config file missing or invalid - check config.yaml
-    echo   3. Preset file not found - check preset_path in config.yaml
-    echo   4. Watch folder path invalid - check watch_folder in config.yaml
-    echo.
-    echo Try running manually first:
-    echo   cd "!SCRIPT_DIR!"
-    echo   python main.py
-    echo.
-) else (
-    echo Service started successfully!
+    echo   1. Missing dependencies: pip install -r requirements.txt
+    echo   2. Invalid config.yaml: Check watch_folder and preset_path
+    echo   3. Try running manually: python main.py
 )
 
 echo.
-echo Service installed successfully!
+echo ========================================
+echo Service Management Commands:
+echo ========================================
+echo Check status:  sc query !SERVICE_NAME!
+echo Start:         nssm start !SERVICE_NAME!
+echo Stop:          nssm stop !SERVICE_NAME!
+echo Restart:       nssm restart !SERVICE_NAME!
+echo Remove:        nssm stop !SERVICE_NAME! ^&^& nssm remove !SERVICE_NAME! confirm
 echo.
-echo To check service status:
-echo   sc query !SERVICE_NAME!
-echo.
-echo To stop the service:
-echo   nssm stop !SERVICE_NAME!
-echo.
-echo To start the service:
-echo   nssm start !SERVICE_NAME!
-echo.
-echo To remove the service:
-echo   nssm stop !SERVICE_NAME!
-echo   nssm remove !SERVICE_NAME! confirm
-echo.
-echo Logs are available at:
-echo   !SCRIPT_DIR!service_output.log
-echo   !SCRIPT_DIR!service_error.log
-echo   !SCRIPT_DIR!preset_processor.log
-echo.
-
 pause
