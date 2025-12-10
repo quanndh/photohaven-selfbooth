@@ -1,35 +1,12 @@
-# Lightroom Preset Auto-Processor Configuration
-
-# Folder to watch for new subfolders
-# Supports both absolute paths (e.g., "/Users/name/Documents/watch")
-# and relative paths (e.g., "./watch" or "../watched")
-# Relative paths are resolved relative to this config file's directory
-# watch_folder: "/Users/quanndh/Documents/job/self_booth_1/watch"
+# Folder to watch for new subfolders (input)
 watch_folder: "../watched"
-# Example relative path: "./watch" or "../watched"
 
-# Path to the Lightroom preset file (.xmp)
-# Supports both absolute paths (e.g., "/Users/name/presets/default.xmp")
-# and relative paths (e.g., "./presets/default.xmp" or "../presets/default.xmp")
-# Relative paths are resolved relative to this config file's directory
-# preset_path: "/Users/quanndh/Documents/job/self_booth_1/presets/default.xmp"
-preset_path: "../vista.xmp"
-# Example relative path: "./presets/default.xmp" or "../presets/default.xmp"
+# Lightroom workflow folders
+lightroom_watched_folder: "../lightroom_watched"  # Where renamed images are moved for Lightroom
+lightroom_destination_folder: "../lightroom_processed"  # Where Lightroom exports processed images
 
-# Output format: "tiff" (16-bit, lossless) or "jpg" (with quality setting)
-output_format: "jpg"
-
-# JPEG quality (1-100, only used if output_format is "jpg")
-jpeg_quality: 95
-
-# Output subfolder name within each processed folder
+# Output folder name within each processed folder (where final images are moved back)
 output_folder: "processed"
-
-# Enable RAW file processing (requires rawpy/libraw)
-raw_processing: true
-
-# Color profile to use: "sRGB", "AdobeRGB", "ProPhotoRGB", or "preserve" (keep original)
-color_profile: "sRGB"
 
 # Supported image extensions
 supported_extensions:
@@ -57,9 +34,17 @@ processing:
   # Maximum concurrent processing jobs
   max_concurrent_jobs: 2
 
-  # Retry failed images
-  retry_failed: true
-  max_retries: 3
+  # Batch processing settings for Lightroom workflow
+  batch_size: 10  # Maximum images to copy at once before waiting
+  batch_timeout_seconds: 8  # Seconds to wait between batches
+
+# Image cleanup settings (runs every 30 minutes by default)
+cleanup:
+  enabled: true  # Enable/disable automatic cleanup
+  folders:  # Folders to clean up (delete images older than max_age_minutes)
+    - "../lightroom_des/images"
+  max_age_minutes: 30  # Delete images older than this (minutes)
+  interval_minutes: 30  # Run cleanup every N minutes
 
 # Logging
 logging:

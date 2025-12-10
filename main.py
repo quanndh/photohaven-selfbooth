@@ -10,8 +10,9 @@ import logging
 import yaml
 from pathlib import Path
 from colorama import init, Fore, Style
-from image_processor import ImageProcessor
 from folder_watcher import FolderWatcher
+from lightroom_destination_watcher import LightroomDestinationWatcher
+from cleanup_old_images import ImageCleanup
 
 # Initialize colorama for colored console output
 init(autoreset=True)
@@ -88,7 +89,7 @@ def load_config(config_path: str = 'config.yaml') -> dict:
             config = yaml.safe_load(f)
         
         # Validate required settings
-        required_keys = ['watch_folder', 'preset_path']
+        required_keys = ['watch_folder']
         for key in required_keys:
             if key not in config:
                 print(f"{Fore.RED}Error: Missing required configuration: {key}")
@@ -97,6 +98,12 @@ def load_config(config_path: str = 'config.yaml') -> dict:
         # Resolve paths (support both absolute and relative)
         if 'watch_folder' in config:
             config['watch_folder'] = str(resolve_path(config['watch_folder'], config_dir))
+        
+        if 'lightroom_watched_folder' in config:
+            config['lightroom_watched_folder'] = str(resolve_path(config['lightroom_watched_folder'], config_dir))
+        
+        if 'lightroom_destination_folder' in config:
+            config['lightroom_destination_folder'] = str(resolve_path(config['lightroom_destination_folder'], config_dir))
         
         if 'preset_path' in config:
             config['preset_path'] = str(resolve_path(config['preset_path'], config_dir))
@@ -131,60 +138,79 @@ def main():
     
     logger.info("Starting Lightroom Preset Auto-Processor")
     
-    # Validate preset file
-    preset_path = Path(config['preset_path'])
-    if not preset_path.exists():
-        logger.error(f"Preset file not found: {preset_path}")
-        print(f"{Fore.RED}Error: Preset file not found: {preset_path}")
-        sys.exit(1)
-    
     # Validate watch folder
     watch_folder = Path(config['watch_folder'])
     if not watch_folder.exists():
         logger.info(f"Creating watch folder: {watch_folder}")
         watch_folder.mkdir(parents=True, exist_ok=True)
     
-    # Initialize image processor
-    try:
-        print(f"{Fore.GREEN}Loading preset: {preset_path}")
-        processor = ImageProcessor(str(preset_path), config)
-        logger.info(f"Preset loaded successfully: {preset_path}")
-        print(f"{Fore.GREEN}Preset loaded successfully{Style.RESET_ALL}\n")
-    except Exception as e:
-        logger.error(f"Failed to initialize image processor: {e}", exc_info=True)
-        print(f"{Fore.RED}Error: Failed to load preset: {e}")
-        sys.exit(1)
+    # Validate Lightroom folders
+    lightroom_watched = Path(config.get('lightroom_watched_folder', '../lightroom-watched'))
+    lightroom_watched.mkdir(parents=True, exist_ok=True)
     
-    # Initialize folder watcher
+    lightroom_destination = Path(config.get('lightroom_destination_folder', '../lightroom-destination'))
+    lightroom_destination.mkdir(parents=True, exist_ok=True)
+    
+    # Initialize folder watcher (for input folders)
     try:
-        watcher = FolderWatcher(str(watch_folder), processor, config)
-        print(f"{Fore.GREEN}Watching folder: {watch_folder}")
-        print(f"{Fore.GREEN}Output format: {config.get('output_format', 'tiff')}")
-        print(f"{Fore.GREEN}Ready to process images...{Style.RESET_ALL}\n")
+        watcher = FolderWatcher(str(watch_folder), None, config)
+        print(f"{Fore.GREEN}Watching input folder: {watch_folder}")
     except Exception as e:
         logger.error(f"Failed to initialize folder watcher: {e}", exc_info=True)
         print(f"{Fore.RED}Error: Failed to start folder watcher: {e}")
         sys.exit(1)
+    
+    # Initialize Lightroom destination watcher (for processed images)
+    try:
+        destination_watcher = LightroomDestinationWatcher(
+            str(lightroom_destination),
+            str(watch_folder),
+            config
+        )
+        print(f"{Fore.GREEN}Watching Lightroom destination: {lightroom_destination}")
+        print(f"{Fore.GREEN}Lightroom watched folder: {lightroom_watched}")
+    except Exception as e:
+        logger.error(f"Failed to initialize Lightroom destination watcher: {e}", exc_info=True)
+        print(f"{Fore.RED}Error: Failed to start Lightroom destination watcher: {e}")
+        sys.exit(1)
+    
+    # Initialize image cleanup (runs every 30 minutes)
+    try:
+        cleanup = ImageCleanup(config)
+        if cleanup.enabled:
+            cleanup.start()
+            cleanup_folders = ', '.join(cleanup.folders)
+            print(f"{Fore.GREEN}Image cleanup enabled: {cleanup_folders}")
+            print(f"{Fore.GREEN}Cleanup interval: {cleanup.interval_minutes} minutes, Max age: {cleanup.max_age_minutes} minutes")
+        print(f"{Fore.GREEN}Ready to process images...{Style.RESET_ALL}\n")
+    except Exception as e:
+        logger.error(f"Failed to initialize image cleanup: {e}", exc_info=True)
+        print(f"{Fore.YELLOW}Warning: Image cleanup failed to start: {e}")
+        cleanup = None
     
     # Setup signal handlers for graceful shutdown
     def signal_handler(sig, frame):
         print(f"\n{Fore.YELLOW}Shutting down...{Style.RESET_ALL}")
         logger.info("Received shutdown signal")
         watcher.stop()
+        destination_watcher.stop()
+        if cleanup:
+            cleanup.stop()
         sys.exit(0)
     
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # Start watcher
+    # Start watchers
     try:
         watcher.start()
+        destination_watcher.start()
         
         # Keep main thread alive
         print(f"{Fore.CYAN}Application running. Press Ctrl+C to stop.{Style.RESET_ALL}\n")
         
         # Wait for processing threads
-        for thread in watcher.processing_threads:
+        for thread in watcher.processing_threads + destination_watcher.processing_threads:
             thread.join()
         
     except KeyboardInterrupt:
@@ -196,6 +222,9 @@ def main():
         sys.exit(1)
     finally:
         watcher.stop()
+        destination_watcher.stop()
+        if cleanup:
+            cleanup.stop()
         logger.info("Application stopped")
 
 

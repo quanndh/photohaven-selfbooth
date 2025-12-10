@@ -5,13 +5,14 @@ Monitors a folder for new subfolder creation and triggers image processing
 
 import time
 import logging
+import shutil
 from pathlib import Path
 from typing import Set, Dict
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from queue import Queue
 from threading import Thread, Lock
-from image_processor import ImageProcessor
+# ImageProcessor import removed - will be provided by user's solution
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +209,7 @@ class FolderCreatedHandler(FileSystemEventHandler):
 class FolderWatcher:
     """Main folder watcher service"""
     
-    def __init__(self, watch_folder: str, processor: ImageProcessor, config: Dict):
+    def __init__(self, watch_folder: str, processor, config: Dict):
         self.watch_folder = Path(watch_folder)
         self.processor = processor
         self.config = config
@@ -306,55 +307,52 @@ class FolderWatcher:
             logger.info(f"No supported image files found in: {folder_path}")
             return
         
-        # Create output folder
-        output_folder = folder / self.config.get('output_folder', 'processed')
-        output_folder.mkdir(exist_ok=True)
+        # Step 1: Rename images with folder name prefix
+        # Step 2: Copy renamed images to lightroom_watched_folder in batches (keep originals)
+        lightroom_watched = Path(self.config.get('lightroom_watched_folder', '../lightroom_watched'))
+        lightroom_watched.mkdir(parents=True, exist_ok=True)
         
-        # Process each image
-        processed_count = 0
-        failed_count = 0
+        folder_name = folder.name
+        batch_size = self.config.get('processing', {}).get('batch_size', 10)
+        batch_timeout = self.config.get('processing', {}).get('batch_timeout_seconds', 5)
         
-        for image_file in image_files:
-            try:
-                # Generate output filename
-                output_filename = image_file.stem
-                output_format = self.config.get('output_format', 'tiff').lower()
-                if output_format == 'jpg' or output_format == 'jpeg':
-                    output_filename += '.jpg'
-                else:
-                    output_filename += '.tif'
-                
-                output_path = output_folder / output_filename
-                
-                # Process image
-                success = self.processor.process_image(str(image_file), str(output_path))
-                
-                if success:
-                    processed_count += 1
-                    logger.info(f"Processed: {image_file.name} -> {output_path.name}")
-                else:
-                    failed_count += 1
-                    logger.error(f"Failed to process: {image_file.name}")
-                    
-                    # Retry if configured
-                    if self.config.get('processing', {}).get('retry_failed', True):
-                        max_retries = self.config.get('processing', {}).get('max_retries', 3)
-                        for retry in range(max_retries):
-                            time.sleep(1)  # Wait before retry
-                            logger.info(f"Retrying {image_file.name} (attempt {retry + 1}/{max_retries})")
-                            if self.processor.process_image(str(image_file), str(output_path)):
-                                processed_count += 1
-                                failed_count -= 1
-                                logger.info(f"Successfully processed on retry: {image_file.name}")
-                                break
+        copied_count = 0
+        total_images = len(image_files)
+        
+        # Process images in batches
+        for batch_start in range(0, total_images, batch_size):
+            batch_end = min(batch_start + batch_size, total_images)
+            batch_images = image_files[batch_start:batch_end]
+            batch_num = (batch_start // batch_size) + 1
+            total_batches = (total_images + batch_size - 1) // batch_size
             
-            except Exception as e:
-                failed_count += 1
-                logger.error(f"Error processing {image_file}: {e}", exc_info=True)
+            logger.info(
+                f"Processing batch {batch_num}/{total_batches} "
+                f"({len(batch_images)} image(s))"
+            )
+            
+            for image_file in batch_images:
+                try:
+                    # Create new name with folder prefix
+                    new_name = f"{folder_name}_{image_file.name}"
+                    
+                    # Copy to lightroom watched folder with new name (keep original)
+                    destination = lightroom_watched / new_name
+                    shutil.copy2(str(image_file), str(destination))
+                    copied_count += 1
+                    logger.info(f"Copied to Lightroom watched: {image_file.name} -> {new_name}")
+                    
+                except Exception as e:
+                    logger.error(f"Error processing {image_file.name}: {e}", exc_info=True)
+            
+            # Wait between batches (except after the last batch)
+            if batch_end < total_images:
+                logger.info(f"Waiting {batch_timeout} seconds before next batch...")
+                time.sleep(batch_timeout)
         
         logger.info(
             f"Folder processing complete: {folder_path} - "
-            f"Processed: {processed_count}, Failed: {failed_count}"
+            f"Copied to Lightroom: {copied_count}/{total_images} image(s) in {total_batches} batch(es)"
         )
     
     def _get_image_files(self, folder: Path) -> list:
