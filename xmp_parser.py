@@ -1,29 +1,52 @@
 """
 XMP Preset Parser for Lightroom Presets
 Parses .xmp preset files to extract Lightroom adjustment parameters
+Supports both plain .xmp files and encrypted .encrypted files
 """
 
 import xml.etree.ElementTree as ET
 import re
 from typing import Dict, Optional, Any
 from pathlib import Path
+import io
 
 
 class XMPPresetParser:
     """Parse Lightroom XMP preset files and extract adjustment parameters"""
     
-    def __init__(self, preset_path: str):
+    def __init__(self, preset_path: str, encrypted: bool = False):
+        """
+        Initialize preset parser
+        
+        Args:
+            preset_path: Path to preset file (.xmp or .encrypted)
+            encrypted: If True, treat as encrypted file (requires preset_encryption module)
+        """
         self.preset_path = Path(preset_path)
         if not self.preset_path.exists():
             raise FileNotFoundError(f"Preset file not found: {preset_path}")
         
+        self.encrypted = encrypted or (self.preset_path.suffix == '.encrypted')
         self.adjustments = {}
         self._parse()
     
     def _parse(self):
         """Parse the XMP preset file"""
         try:
-            tree = ET.parse(self.preset_path)
+            # Handle encrypted presets
+            if self.encrypted:
+                try:
+                    from preset_encryption import PresetEncryption
+                    encryption = PresetEncryption()
+                    preset_data = encryption.decrypt_to_memory(str(self.preset_path))
+                    tree = ET.parse(io.BytesIO(preset_data))
+                except ImportError:
+                    raise ImportError("preset_encryption module required for encrypted presets. Install cryptography: pip install cryptography")
+                except Exception as e:
+                    raise ValueError(f"Failed to decrypt preset: {e}")
+            else:
+                tree = ET.parse(self.preset_path)
+            
             root = tree.getroot()
             
             # Lightroom stores adjustments in rdf:Description elements
@@ -46,6 +69,9 @@ class XMPPresetParser:
                 
                 # Extract Lightroom-specific settings (lr namespace)
                 self._extract_lr_settings(desc, namespaces)
+                
+                # Extract tone curves from rdf:Seq elements (ToneCurvePV2012)
+                self._extract_tone_curves(desc, namespaces)
         
         except ET.ParseError as e:
             raise ValueError(f"Failed to parse XMP file: {e}")
@@ -58,12 +84,15 @@ class XMPPresetParser:
         
         # Common Camera Raw adjustments
         crs_params = [
-            'Exposure', 'Contrast', 'Highlights', 'Shadows', 'Whites', 'Blacks',
-            'Clarity', 'Vibrance', 'Saturation', 'Temperature', 'Tint',
+            'Exposure', 'Exposure2012', 'Contrast', 'Contrast2012', 
+            'Highlights', 'Highlights2012', 'Shadows', 'Shadows2012', 
+            'Whites', 'Whites2012', 'Blacks', 'Blacks2012',
+            'Clarity', 'Clarity2012', 'Vibrance', 'Saturation', 
+            'Temperature', 'Tint', 'Texture', 'Dehaze',
             'Sharpness', 'LuminanceSmoothing', 'ColorNoiseReduction',
             'GrainAmount', 'GrainSize', 'GrainRoughness',
             'LensProfileEnable', 'LensManualDistortionAmount',
-            'VignetteAmount', 'DefringePurpleAmount', 'DefringeGreenAmount',
+            'VignetteAmount', 'PostCropVignetteAmount', 'DefringePurpleAmount', 'DefringeGreenAmount',
             'ChromaticAberrationB', 'ChromaticAberrationR',
             'ToneCurveName', 'ToneCurve', 'ToneCurveRed', 'ToneCurveGreen', 'ToneCurveBlue',
             'HueAdjustmentRed', 'HueAdjustmentOrange', 'HueAdjustmentYellow',
@@ -75,6 +104,14 @@ class XMPPresetParser:
             'LuminanceAdjustmentRed', 'LuminanceAdjustmentOrange', 'LuminanceAdjustmentYellow',
             'LuminanceAdjustmentGreen', 'LuminanceAdjustmentAqua', 'LuminanceAdjustmentBlue',
             'LuminanceAdjustmentPurple', 'LuminanceAdjustmentMagenta',
+            # Split Toning
+            'SplitToningShadowHue', 'SplitToningShadowSaturation',
+            'SplitToningHighlightHue', 'SplitToningHighlightSaturation', 'SplitToningBalance',
+            # Color Grading
+            'ColorGradeShadowLum', 'ColorGradeMidtoneLum', 'ColorGradeHighlightLum',
+            'ColorGradeMidtoneHue', 'ColorGradeMidtoneSat',
+            'ColorGradeGlobalHue', 'ColorGradeGlobalSat', 'ColorGradeGlobalLum',
+            'ColorGradeBlending',
         ]
         
         for param in crs_params:
@@ -100,6 +137,43 @@ class XMPPresetParser:
             value = desc.get(attr_name)
             if value is not None:
                 self.adjustments[param] = self._convert_value(value)
+    
+    def _extract_tone_curves(self, desc, namespaces):
+        """Extract tone curves from rdf:Seq elements (ToneCurvePV2012)"""
+        crs_prefix = '{http://ns.adobe.com/camera-raw-settings/1.0/}'
+        
+        # Tone curve elements stored as sequences
+        tone_curve_names = [
+            'ToneCurvePV2012',
+            'ToneCurvePV2012Red',
+            'ToneCurvePV2012Green',
+            'ToneCurvePV2012Blue',
+        ]
+        
+        for curve_name in tone_curve_names:
+            curve_elem = desc.find(f'.//{crs_prefix}{curve_name}', namespaces)
+            if curve_elem is not None:
+                seq = curve_elem.find('rdf:Seq', namespaces)
+                if seq is not None:
+                    coords = []
+                    for li in seq.findall('rdf:li', namespaces):
+                        text = li.text
+                        if text and ',' in text:
+                            try:
+                                x, y = text.split(',')
+                                coords.append((float(x.strip()), float(y.strip())))
+                            except ValueError:
+                                pass
+                    if len(coords) > 0:
+                        # Map to standard names
+                        if curve_name == 'ToneCurvePV2012':
+                            self.adjustments['ToneCurve'] = coords
+                        elif curve_name == 'ToneCurvePV2012Red':
+                            self.adjustments['ToneCurveRed'] = coords
+                        elif curve_name == 'ToneCurvePV2012Green':
+                            self.adjustments['ToneCurveGreen'] = coords
+                        elif curve_name == 'ToneCurvePV2012Blue':
+                            self.adjustments['ToneCurveBlue'] = coords
     
     def _convert_value(self, value: str) -> Any:
         """Convert string value to appropriate type"""

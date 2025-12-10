@@ -17,7 +17,7 @@ preset_path: "../vista.xmp"
 # Example relative path: "./presets/default.xmp" or "../presets/default.xmp"
 
 # Output format: "tiff" (16-bit, lossless) or "jpg" (with quality setting)
-output_format: "tiff"
+output_format: "jpg"
 
 # JPEG quality (1-100, only used if output_format is "jpg")
 jpeg_quality: 95
