@@ -36,11 +36,18 @@ def normalize_path(path_str: str) -> Path:
         # Handle drive letters (Z:/ or Z:\)
         elif len(path_str) >= 2 and path_str[1] == ':':
             # Normalize to use backslash after drive letter
-            if path_str[2:].startswith('/'):
-                normalized = path_str[0:2] + path_str[2:].replace('/', '\\')
+            # Handle cases like "Z:/", "Z:\", "Z:/folder", "Z:\folder"
+            if len(path_str) == 2 or (len(path_str) == 3 and path_str[2] in ['/', '\\']):
+                # Just "Z:" or "Z:/" or "Z:\" - return as "Z:\"
+                return Path(path_str[0:2] + '\\')
+            elif path_str[2:].startswith('/'):
+                # "Z:/folder" -> "Z:\folder"
+                normalized = path_str[0:2] + '\\' + path_str[3:].replace('/', '\\')
+                return Path(normalized)
             else:
-                normalized = path_str.replace('/', '\\')
-            return Path(normalized)
+                # "Z:\folder" or "Z:folder" - normalize slashes
+                normalized = path_str[0:2] + '\\' + path_str[2:].lstrip('\\/').replace('/', '\\')
+                return Path(normalized)
         else:
             # Regular path, normalize slashes
             return Path(path_str.replace('/', '\\'))
@@ -905,10 +912,20 @@ class FolderWatcher:
             # Get output base folder (normalize Windows paths)
             output_base_str = self.config.get('output_base_folder', '../output')
             output_base = normalize_path(output_base_str)
+            
+            # Check if path is a root drive (e.g., "Z:\") - can't create root, need subdirectory
+            output_base_path_str = str(output_base)
+            if os.name == 'nt' and len(output_base_path_str) == 3 and output_base_path_str[1] == ':' and output_base_path_str[2] == '\\':
+                logger.error(f"Cannot use root drive as output folder: {output_base}. Please specify a subdirectory, e.g., 'Z:/output'")
+                return
+            
+            logger.debug(f"Output base folder: {output_base} (normalized from: {output_base_str})")
             try:
                 output_base.mkdir(parents=True, exist_ok=True)
+                logger.debug(f"Output base folder exists or created: {output_base}")
             except (OSError, PermissionError) as e:
                 logger.error(f"Cannot create output folder {output_base}: {e}")
+                logger.error(f"Original path string: {output_base_str}")
                 return
             
             # Create output folder structure: output_base/folder_name/ (for original images)
