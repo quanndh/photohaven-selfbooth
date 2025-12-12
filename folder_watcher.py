@@ -614,8 +614,8 @@ class FolderWatcher:
             
             if not parent_folder.exists() or not parent_folder.is_dir():
                 logger.warning(f"Parent folder does not exist or is not a directory: {parent_folder_path}")
-            return
-        
+                return
+            
             parent_folder_name = parent_folder.name
             logger.info(f"Starting to watch parent folder for first subfolder: {parent_folder_name}")
             logger.info(f"Parent folder path: {parent_folder}")
