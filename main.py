@@ -13,6 +13,7 @@ from colorama import init, Fore, Style
 from folder_watcher import FolderWatcher
 from lightroom_destination_watcher import LightroomDestinationWatcher
 from cleanup_old_images import ImageCleanup
+from processing_counter import ProcessingCounter
 
 # Initialize colorama for colored console output
 init(autoreset=True)
@@ -105,9 +106,6 @@ def load_config(config_path: str = 'config.yaml') -> dict:
         if 'lightroom_destination_folder' in config:
             config['lightroom_destination_folder'] = str(resolve_path(config['lightroom_destination_folder'], config_dir))
         
-        if 'preset_path' in config:
-            config['preset_path'] = str(resolve_path(config['preset_path'], config_dir))
-        
         return config
     
     except yaml.YAMLError as e:
@@ -138,6 +136,11 @@ def main():
     
     logger.info("Starting Lightroom Preset Auto-Processor")
     
+    # Initialize processing counter (shared between watchers)
+    processing_threshold = config.get('processing', {}).get('processing_threshold', 5)
+    processing_counter = ProcessingCounter(threshold=processing_threshold)
+    logger.info(f"Processing counter initialized with threshold: {processing_threshold}")
+    
     # Validate watch folder
     watch_folder = Path(config['watch_folder'])
     if not watch_folder.exists():
@@ -153,7 +156,7 @@ def main():
     
     # Initialize folder watcher (for input folders)
     try:
-        watcher = FolderWatcher(str(watch_folder), None, config)
+        watcher = FolderWatcher(str(watch_folder), None, config, processing_counter)
         print(f"{Fore.GREEN}Watching input folder: {watch_folder}")
     except Exception as e:
         logger.error(f"Failed to initialize folder watcher: {e}", exc_info=True)
@@ -165,7 +168,8 @@ def main():
         destination_watcher = LightroomDestinationWatcher(
             str(lightroom_destination),
             str(watch_folder),
-            config
+            config,
+            processing_counter
         )
         print(f"{Fore.GREEN}Watching Lightroom destination: {lightroom_destination}")
         print(f"{Fore.GREEN}Lightroom watched folder: {lightroom_watched}")

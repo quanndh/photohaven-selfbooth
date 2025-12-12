@@ -5,8 +5,16 @@ watch_folder: "../watched"
 lightroom_watched_folder: "../lightroom_watched"  # Where renamed images are moved for Lightroom
 lightroom_destination_folder: "../lightroom_processed"  # Where Lightroom exports processed images
 
-# Output folder name within each processed folder (where final images are moved back)
-output_folder: "processed"
+# Output configuration
+output_base_folder: "../output"  # Base folder where processed images are moved
+output_folder: "processed"  # Subfolder name within each folder (e.g., output/folder_name/processed/)
+
+# Filename separator (used to separate folder name from original filename)
+# Use a sequence that's unlikely to appear in folder names or filenames
+filename_separator: "___"  # Triple underscore separator
+
+# Folder watching timeout (how long to watch child folders for new images)
+folder_watch_timeout_minutes: 2  # Stop watching and delete folder after this time
 
 # Supported image extensions
 supported_extensions:
@@ -34,9 +42,9 @@ processing:
   # Maximum concurrent processing jobs
   max_concurrent_jobs: 2
 
-  # Batch processing settings for Lightroom workflow
-  batch_size: 10  # Maximum images to copy at once before waiting
-  batch_timeout_seconds: 8  # Seconds to wait between batches
+  # Processing threshold: maximum number of images being processed per folder
+  # When threshold is reached, new images are held until counter decreases
+  processing_threshold: 5  # Hold new images if this many are already being processed
 
 # Image cleanup settings (runs every 30 minutes by default)
 cleanup:

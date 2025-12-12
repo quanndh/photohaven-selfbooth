@@ -24,7 +24,7 @@ class LightroomDestinationHandler(FileSystemEventHandler):
         self.processor_queue = processor_queue
         self.config = config
         self.destination_folder = destination_folder
-        self.watch_folder = watch_folder
+        # watch_folder parameter kept for API compatibility but not used
         self.pending_files: Dict[str, float] = {}  # file_path -> timestamp
         self.processed_files: Set[str] = set()
         self.lock = Lock()
@@ -135,10 +135,10 @@ class LightroomDestinationHandler(FileSystemEventHandler):
 class LightroomDestinationWatcher:
     """Watch Lightroom destination folder and move processed images back to original folders"""
     
-    def __init__(self, destination_folder: str, watch_folder: str, config: Dict):
+    def __init__(self, destination_folder: str, watch_folder: str, config: Dict, processing_counter):
         self.destination_folder = Path(destination_folder)
-        self.watch_folder = Path(watch_folder)
         self.config = config
+        self.processing_counter = processing_counter
         
         if not self.destination_folder.exists():
             logger.warning(f"Lightroom destination folder does not exist, creating: {destination_folder}")
@@ -152,7 +152,7 @@ class LightroomDestinationWatcher:
             self.processor_queue,
             config,
             str(self.destination_folder),
-            str(self.watch_folder)
+            str(watch_folder)  # Keep for API compatibility but not used
         )
         
         # Observer
@@ -219,7 +219,7 @@ class LightroomDestinationWatcher:
                 logger.error(f"Error in processing worker: {e}", exc_info=True)
     
     def _process_file(self, file_path: str):
-        """Process a single file: extract folder name and move to original folder"""
+        """Process a single file: extract folder name and move to output folder"""
         try:
             file_path_obj = Path(file_path)
             
@@ -230,26 +230,29 @@ class LightroomDestinationWatcher:
             filename = file_path_obj.name
             logger.info(f"Processing file: {filename}")
             
-            # Extract folder name from filename (format: folder_name_original_filename.ext)
-            # Find first underscore and split
-            if '_' not in filename:
-                logger.warning(f"Filename does not contain folder prefix: {filename}")
+            # Extract folder name from filename (format: folder_name___original_filename.ext)
+            # Use configured separator to reliably separate folder name from filename
+            separator = self.config.get('filename_separator', '___')
+            
+            if separator not in filename:
+                logger.warning(f"Filename does not contain folder prefix separator '{separator}': {filename}")
                 return
             
-            # Split on first underscore
-            parts = filename.split('_', 1)
+            # Split on separator (should only appear once)
+            parts = filename.split(separator, 1)
+            if len(parts) != 2:
+                logger.warning(f"Filename does not contain exactly one separator '{separator}': {filename}")
+                return
+            
             folder_name = parts[0]
             original_filename = parts[1]
             
-            # Find the original folder in watch_folder
-            original_folder = self.watch_folder / folder_name
+            # Get output base folder from config
+            output_base = Path(self.config.get('output_base_folder', '../output'))
+            output_base.mkdir(parents=True, exist_ok=True)
             
-            if not original_folder.exists():
-                logger.warning(f"Original folder not found: {original_folder}")
-                return
-            
-            # Create output folder in original folder
-            output_folder = original_folder / self.config.get('output_folder', 'processed')
+            # Create output folder structure: output_base/folder_name/processed/
+            output_folder = output_base / folder_name / self.config.get('output_folder', 'processed')
             output_folder.mkdir(parents=True, exist_ok=True)
             
             # Destination path
@@ -259,6 +262,10 @@ class LightroomDestinationWatcher:
             shutil.move(str(file_path_obj), str(destination))
             
             logger.info(f"Moved {filename} -> {destination}")
+            
+            # Decrement processing counter (image moved to output)
+            count = self.processing_counter.decrement(folder_name)
+            logger.debug(f"Processing counter for {folder_name}: {count}/{self.processing_counter.threshold}")
             
         except Exception as e:
             logger.error(f"Error processing file {file_path}: {e}", exc_info=True)
