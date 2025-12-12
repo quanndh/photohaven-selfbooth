@@ -16,6 +16,80 @@ from threading import Thread, Lock
 logger = logging.getLogger(__name__)
 
 
+class ParentFolderSubfolderHandler(FileSystemEventHandler):
+    """Handle file system events for subfolder creation in parent folders"""
+    
+    def __init__(self, parent_folder_path: str, parent_folder_name: str, folder_watcher, config: Dict):
+        super().__init__()
+        self.parent_folder_path = Path(parent_folder_path)
+        self.parent_folder_name = parent_folder_name
+        self.folder_watcher = folder_watcher
+        self.config = config
+        self.child_folder_found = False
+        self.lock = Lock()
+    
+    def on_created(self, event: FileSystemEvent):
+        """Called when a new file or directory is created"""
+        if not event.is_directory:
+            return
+        
+        with self.lock:
+            if self.child_folder_found:
+                return  # Already found child folder, ignore
+        
+        try:
+            folder_path = Path(event.src_path).resolve()
+            
+            # Check if it's a direct child of the parent folder
+            if folder_path.parent.resolve() != self.parent_folder_path.resolve():
+                return
+            
+            # Found the first child folder!
+            with self.lock:
+                if not self.child_folder_found:
+                    self.child_folder_found = True
+                    logger.info(f"First child folder detected in {self.parent_folder_name}: {folder_path.name}")
+                    # Start watching this child folder for images
+                    self.folder_watcher._watch_child_folder_for_images(
+                        str(self.parent_folder_path),
+                        self.parent_folder_name,
+                        folder_path
+                    )
+        except Exception as e:
+            logger.debug(f"Error handling subfolder creation in {self.parent_folder_name}: {e}")
+    
+    def on_moved(self, event: FileSystemEvent):
+        """Called when a folder is moved/renamed"""
+        if not event.is_directory:
+            return
+        
+        with self.lock:
+            if self.child_folder_found:
+                return  # Already found child folder, ignore
+        
+        try:
+            # event.dest_path is the new location after move
+            folder_path = Path(event.dest_path).resolve()
+            
+            # Check if it's a direct child of the parent folder
+            if folder_path.parent.resolve() != self.parent_folder_path.resolve():
+                return
+            
+            # Found the first child folder!
+            with self.lock:
+                if not self.child_folder_found:
+                    self.child_folder_found = True
+                    logger.info(f"First child folder detected (moved) in {self.parent_folder_name}: {folder_path.name}")
+                    # Start watching this child folder for images
+                    self.folder_watcher._watch_child_folder_for_images(
+                        str(self.parent_folder_path),
+                        self.parent_folder_name,
+                        folder_path
+                    )
+        except Exception as e:
+            logger.debug(f"Error handling subfolder move in {self.parent_folder_name}: {e}")
+
+
 class ChildFolderImageHandler(FileSystemEventHandler):
     """Handle file system events for new images in child folders"""
     
@@ -456,7 +530,7 @@ class FolderWatcher:
                 logger.error(f"Error in folder watching worker: {e}", exc_info=True)
     
     def _start_watching_folder(self, parent_folder_path: str):
-        """Start watching a parent folder for its child folder, then watch child folder for images"""
+        """Start watching a parent folder for the first subfolder created, then watch that subfolder for images"""
         try:
             parent_folder = Path(parent_folder_path)
             
@@ -465,47 +539,40 @@ class FolderWatcher:
                 return
             
             parent_folder_name = parent_folder.name
-            child_folder_name = self.config.get('child_folder_name', 'photos')
-            child_folder_path = parent_folder / child_folder_name
+            logger.info(f"Starting to watch parent folder for first subfolder: {parent_folder_name}")
             
-            logger.info(f"Looking for child folder '{child_folder_name}' in parent folder: {parent_folder_name}")
-            
-            # Check if child folder exists, if not wait and check periodically
-            if not child_folder_path.exists():
-                logger.info(f"Child folder '{child_folder_name}' not found in {parent_folder_name}, will check periodically")
-                # Start a thread to periodically check for the child folder
-                Thread(
-                    target=self._wait_for_child_folder,
-                    daemon=True,
-                    args=(parent_folder_path, parent_folder_name, child_folder_name)
-                ).start()
+            # Check if there's already a subfolder
+            existing_subfolders = [p for p in parent_folder.iterdir() if p.is_dir()]
+            if existing_subfolders:
+                # Use the first existing subfolder
+                first_subfolder = existing_subfolders[0]
+                logger.info(f"Found existing subfolder in {parent_folder_name}: {first_subfolder.name}")
+                self._watch_child_folder_for_images(parent_folder_path, parent_folder_name, first_subfolder)
                 return
             
-            # Child folder exists, start watching it
-            self._watch_child_folder_for_images(parent_folder_path, parent_folder_name, child_folder_path)
+            # No subfolder exists yet, watch for the first one to be created
+            # Create handler to watch for subfolder creation
+            subfolder_handler = ParentFolderSubfolderHandler(
+                parent_folder_path,
+                parent_folder_name,
+                self,
+                self.config
+            )
+            
+            # Create observer for the parent folder (to detect subfolder creation)
+            observer = Observer()
+            observer.schedule(subfolder_handler, str(parent_folder), recursive=False)
+            observer.start()
+            
+            # Track using parent folder path
+            created_time = time.time()
+            with self.watched_folders_lock:
+                self.watched_folders[parent_folder_path] = (observer, subfolder_handler, created_time)
+            
+            logger.info(f"Now watching parent folder {parent_folder_name} for first subfolder creation")
             
         except Exception as e:
             logger.error(f"Error starting to watch folder {parent_folder_path}: {e}", exc_info=True)
-    
-    def _wait_for_child_folder(self, parent_folder_path: str, parent_folder_name: str, child_folder_name: str):
-        """Periodically check for child folder to appear"""
-        parent_folder = Path(parent_folder_path)
-        child_folder_path = parent_folder / child_folder_name
-        
-        max_wait_time = self.folder_timeout_seconds  # Wait up to folder timeout
-        check_interval = 2  # Check every 2 seconds
-        waited = 0
-        
-        while waited < max_wait_time:
-            time.sleep(check_interval)
-            waited += check_interval
-            
-            if child_folder_path.exists() and child_folder_path.is_dir():
-                logger.info(f"Child folder '{child_folder_name}' found in {parent_folder_name}")
-                self._watch_child_folder_for_images(parent_folder_path, parent_folder_name, child_folder_path)
-                return
-        
-        logger.warning(f"Child folder '{child_folder_name}' not found in {parent_folder_name} within timeout period")
     
     def _watch_child_folder_for_images(self, parent_folder_path: str, parent_folder_name: str, child_folder_path: Path):
         """Watch the child folder for images, using parent folder name for processing"""
@@ -515,6 +582,16 @@ class FolderWatcher:
                 return
             
             logger.info(f"Starting to watch child folder '{child_folder_path.name}' for images in parent: {parent_folder_name}")
+            
+            # Stop any existing observer for this parent folder (if watching for subfolder creation)
+            with self.watched_folders_lock:
+                if parent_folder_path in self.watched_folders:
+                    old_observer, old_handler, _ = self.watched_folders[parent_folder_path]
+                    try:
+                        old_observer.stop()
+                        old_observer.join(timeout=1)
+                    except Exception as e:
+                        logger.debug(f"Error stopping old observer: {e}")
             
             # Create image handler for the child folder, but use parent folder name
             image_handler = ChildFolderImageHandler(
