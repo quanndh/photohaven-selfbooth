@@ -177,14 +177,15 @@ class ChildFolderImageHandler(FileSystemEventHandler):
                 # Queue all existing files for processing
                 for file_path_str in existing_files:
                     logger.info(f"Queueing existing image for processing: {file_path_str}")
+                    logger.debug(f"Queue size before put: {self.image_queue.qsize()}")
                     try:
                         self.image_queue.put((self.folder_path, self.folder_name, file_path_str))
-                        logger.debug(f"Successfully queued: {file_path_str}")
+                        logger.info(f"Successfully queued image: {Path(file_path_str).name} (queue size: {self.image_queue.qsize()})")
                     except Exception as e:
                         logger.error(f"Error queueing image {file_path_str}: {e}", exc_info=True)
                 
                 if existing_files:
-                    logger.info(f"Found {len(existing_files)} existing image(s) in {self.folder_name}, queued for processing")
+                    logger.info(f"Found {len(existing_files)} existing image(s) in {self.folder_name}, queued for processing (final queue size: {self.image_queue.qsize()})")
                 else:
                     logger.info(f"No existing images found in {self.folder_name}")
         except Exception as e:
@@ -762,12 +763,17 @@ class FolderWatcher:
     
     def _image_processing_worker(self):
         """Worker thread that processes individual images"""
+        logger.debug("Image processing worker started")
         while self.running:
             try:
                 # Get image from queue (with timeout to allow checking running flag)
                 try:
                     folder_path, folder_name, image_path = self.image_queue.get(timeout=1)
-                except:
+                    logger.info(f"Got image from queue: {Path(image_path).name} for folder: {folder_name} (queue size: {self.image_queue.qsize()})")
+                except Exception as queue_exception:
+                    # Queue timeout (expected) or other exception
+                    if "Empty" not in str(type(queue_exception).__name__):
+                        logger.debug(f"Queue get exception: {type(queue_exception).__name__}: {queue_exception}")
                     # Check for pending items that can now be processed
                     self._process_pending_items()
                     continue
@@ -785,7 +791,9 @@ class FolderWatcher:
                     continue
                 
                 # Process the image
+                logger.debug(f"About to process image: {Path(image_path).name} for folder: {folder_name}")
                 self._process_image(folder_path, folder_name, image_path)
+                logger.debug(f"Finished processing image: {Path(image_path).name} for folder: {folder_name}")
                 
                 # Mark task as done
                 self.image_queue.task_done()
@@ -881,9 +889,16 @@ class FolderWatcher:
                 return False
         return False
     
-    def _process_image(self, folder_path: Path, folder_name: str, image_path: str):
+    def _process_image(self, folder_path, folder_name: str, image_path: str):
         """Process a single image: move original to output, copy renamed to Lightroom"""
         try:
+            # Ensure folder_path is a Path object (it might be passed as Path or str)
+            if isinstance(folder_path, str):
+                folder_path = Path(folder_path)
+            elif not isinstance(folder_path, Path):
+                logger.error(f"Invalid folder_path type: {type(folder_path)}")
+                return
+            
             image_file = Path(image_path)
             
             if not image_file.exists():
@@ -891,6 +906,7 @@ class FolderWatcher:
                 return
             
             logger.info(f"Processing image: {image_file.name} from folder: {folder_name}")
+            logger.debug(f"Image path: {image_path}, Folder path: {folder_path}")
             
             # Get output base folder
             output_base = Path(self.config.get('output_base_folder', '../output'))
