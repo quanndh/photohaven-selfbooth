@@ -940,7 +940,7 @@ class FolderWatcher:
                 if not is_root_drive:
                     # Not a root drive, try to create the base folder
                     try:
-                        output_base.mkdir(parents=True, exist_ok=True)
+                        # output_base.mkdir(parents=True, exist_ok=True)
                         logger.debug(f"Output base folder created: {output_base}")
                     except (OSError, PermissionError) as e:
                         logger.error(f"Cannot create output folder {output_base}: {e}")
