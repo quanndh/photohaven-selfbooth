@@ -829,66 +829,6 @@ class FolderWatcher:
             except Exception as e:
                 logger.error(f"Error in pending processor worker: {e}", exc_info=True)
     
-    def _wait_for_file_accessible(self, file_path: Path, max_wait_seconds: int = 10, check_interval: float = 0.5) -> bool:
-        """Wait for a file to become accessible (not locked by another process)"""
-        waited = 0
-        while waited < max_wait_seconds:
-            try:
-                # Try to open the file in read mode to check if it's accessible
-                with open(file_path, 'rb') as f:
-                    f.read(1)  # Try to read at least 1 byte
-                return True
-            except (PermissionError, OSError, IOError):
-                # File is locked, wait and retry
-                time.sleep(check_interval)
-                waited += check_interval
-            except Exception:
-                # Other error, assume not accessible
-                return False
-        return False
-    
-    def _move_file_with_retry(self, source: Path, destination: Path, max_retries: int = 5, retry_delay: float = 1.0) -> bool:
-        """Move a file with retry logic for locked files"""
-        for attempt in range(max_retries):
-            try:
-                # Wait for file to be accessible before moving
-                if not self._wait_for_file_accessible(source, max_wait_seconds=2):
-                    if attempt < max_retries - 1:
-                        logger.debug(f"File {source.name} still locked, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})")
-                        time.sleep(retry_delay)
-                        continue
-                    else:
-                        logger.warning(f"File {source.name} still locked after {max_retries} attempts")
-                        return False
-                
-                # Try to move the file
-                shutil.move(str(source), str(destination))
-                return True
-            except PermissionError as e:
-                if attempt < max_retries - 1:
-                    logger.debug(f"Permission error moving {source.name}, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries}): {e}")
-                    time.sleep(retry_delay)
-                else:
-                    logger.error(f"Permission error moving {source.name} after {max_retries} attempts: {e}")
-                    return False
-            except OSError as e:
-                # Check if it's a "file in use" error
-                if "being used by another process" in str(e).lower() or "used by another process" in str(e).lower():
-                    if attempt < max_retries - 1:
-                        logger.debug(f"File {source.name} in use, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})")
-                        time.sleep(retry_delay)
-                    else:
-                        logger.error(f"File {source.name} still in use after {max_retries} attempts: {e}")
-                        return False
-                else:
-                    # Other OS error, don't retry
-                    logger.error(f"OS error moving {source.name}: {e}")
-                    return False
-            except Exception as e:
-                logger.error(f"Unexpected error moving {source.name}: {e}", exc_info=True)
-                return False
-        return False
-    
     def _process_image(self, folder_path, folder_name: str, image_path: str):
         """Process a single image: move original to output, copy renamed to Lightroom"""
         try:
@@ -918,13 +858,12 @@ class FolderWatcher:
             
             # Move original image to output folder (not in processed subfolder)
             original_destination = output_folder / image_file.name
-            
-            # Move file with retry logic for locked files
-            if not self._move_file_with_retry(image_file, original_destination):
-                logger.error(f"Failed to move original image {image_file.name} after retries")
+            try:
+                shutil.move(str(image_file), str(original_destination))
+                logger.info(f"Moved original image: {image_file.name} -> {original_destination}")
+            except Exception as e:
+                logger.error(f"Error moving original image {image_file.name}: {e}", exc_info=True)
                 return
-            
-            logger.info(f"Moved original image: {image_file.name} -> {original_destination}")
             
             # Create new name with folder prefix for Lightroom
             # Use separator to reliably separate folder name from filename
