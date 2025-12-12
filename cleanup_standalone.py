@@ -48,11 +48,17 @@ def load_config(config_path: str = 'config.yaml') -> dict:
         if 'lightroom_destination_folder' in config:
             config['lightroom_destination_folder'] = str(resolve_path(config['lightroom_destination_folder'], config_dir))
         
-        # Resolve cleanup folder paths
+        # Resolve cleanup folder paths (use normalize_path for Windows compatibility)
         if 'cleanup' in config and 'folders' in config['cleanup']:
+            from cleanup_old_images import normalize_path
             resolved_folders = []
             for folder in config['cleanup']['folders']:
-                resolved_folders.append(str(resolve_path(folder, config_dir)))
+                # For absolute paths (Windows drives, UNC), use normalize_path
+                # For relative paths, use resolve_path
+                if Path(folder).is_absolute() or (len(folder) >= 2 and folder[1] == ':'):
+                    resolved_folders.append(str(normalize_path(folder)))
+                else:
+                    resolved_folders.append(str(resolve_path(folder, config_dir)))
             config['cleanup']['folders'] = resolved_folders
         
         return config

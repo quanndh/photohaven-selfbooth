@@ -6,6 +6,7 @@ Monitors a folder for new subfolder creation and watches each subfolder for new 
 import time
 import logging
 import shutil
+import os
 from pathlib import Path
 from typing import Set, Dict, Optional
 from watchdog.observers import Observer
@@ -14,6 +15,38 @@ from queue import Queue
 from threading import Thread, Lock
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_path(path_str: str) -> Path:
+    """
+    Normalize a path string to handle Windows drive letters and UNC paths correctly.
+    Handles: Z:/, Z:\\, \\\\server\\share, //server/share, etc.
+    """
+    if not path_str:
+        return Path('.')
+    
+    # Normalize forward/backward slashes for Windows
+    # Replace forward slashes with backslashes on Windows, but preserve UNC paths
+    if os.name == 'nt':  # Windows
+        # Handle UNC paths (\\server\share or //server/share)
+        if path_str.startswith('\\\\') or path_str.startswith('//'):
+            # Keep UNC format, normalize slashes
+            normalized = path_str.replace('/', '\\')
+            return Path(normalized)
+        # Handle drive letters (Z:/ or Z:\)
+        elif len(path_str) >= 2 and path_str[1] == ':':
+            # Normalize to use backslash after drive letter
+            if path_str[2:].startswith('/'):
+                normalized = path_str[0:2] + path_str[2:].replace('/', '\\')
+            else:
+                normalized = path_str.replace('/', '\\')
+            return Path(normalized)
+        else:
+            # Regular path, normalize slashes
+            return Path(path_str.replace('/', '\\'))
+    else:
+        # Unix-like systems, just use Path directly
+        return Path(path_str)
 
 
 class ParentFolderSubfolderHandler(FileSystemEventHandler):
@@ -858,9 +891,14 @@ class FolderWatcher:
             logger.info(f"Processing image: {image_file.name} from folder: {folder_name}")
             logger.debug(f"Image path: {image_path}, Folder path: {folder_path}")
             
-            # Get output base folder
-            output_base = Path(self.config.get('output_base_folder', '../output'))
-            output_base.mkdir(parents=True, exist_ok=True)
+            # Get output base folder (normalize Windows paths)
+            output_base_str = self.config.get('output_base_folder', '../output')
+            output_base = normalize_path(output_base_str)
+            try:
+                output_base.mkdir(parents=True, exist_ok=True)
+            except (OSError, PermissionError) as e:
+                logger.error(f"Cannot create output folder {output_base}: {e}")
+                return
             
             # Create output folder structure: output_base/folder_name/ (for original images)
             output_folder = output_base / folder_name

@@ -247,9 +247,15 @@ class LightroomDestinationWatcher:
             folder_name = parts[0]
             original_filename = parts[1]
             
-            # Get output base folder from config
-            output_base = Path(self.config.get('output_base_folder', '../output'))
-            output_base.mkdir(parents=True, exist_ok=True)
+            # Get output base folder from config (normalize Windows paths)
+            from folder_watcher import normalize_path
+            output_base_str = self.config.get('output_base_folder', '../output')
+            output_base = normalize_path(output_base_str)
+            try:
+                output_base.mkdir(parents=True, exist_ok=True)
+            except (OSError, PermissionError) as e:
+                logger.error(f"Cannot create output folder {output_base}: {e}")
+                return
             
             # Create output folder structure: output_base/folder_name/processed/
             output_folder = output_base / folder_name / self.config.get('output_folder', 'processed')
