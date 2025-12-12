@@ -630,28 +630,34 @@ class FolderWatcher:
     
     def _folder_watching_worker(self):
         """Worker thread that starts watching new folders"""
+        logger.info("Folder watching worker thread started")
         while self.running:
             try:
                 # Get folder from queue (with timeout to allow checking running flag)
                 try:
                     folder_path = self.folder_queue.get(timeout=1)
+                    logger.info(f"Folder watching worker: Got folder from queue: {folder_path}")
                 except:
                     continue
                 
                 # Start watching this folder for new images
+                logger.info(f"Folder watching worker: Starting to watch folder: {folder_path}")
                 self._start_watching_folder(folder_path)
+                logger.info(f"Folder watching worker: Finished watching folder: {folder_path}")
                 
                 # Mark task as done
                 self.folder_queue.task_done()
+                logger.info(f"Folder watching worker: Marked task as done for: {folder_path}")
             
             except Exception as e:
                 logger.error(f"Error in folder watching worker: {e}", exc_info=True)
     
     def _start_watching_folder(self, parent_folder_path: str):
         """Start watching a parent folder for the first subfolder created, then watch that subfolder for images"""
+        logger.info(f"_start_watching_folder called with: {parent_folder_path}")
         try:
-            logger.info(f"_start_watching_folder called with: {parent_folder_path}")
             parent_folder = Path(parent_folder_path)
+            logger.info(f"Created Path object: {parent_folder}")
             
             if not parent_folder.exists() or not parent_folder.is_dir():
                 logger.warning(f"Parent folder does not exist or is not a directory: {parent_folder_path}")
@@ -713,12 +719,10 @@ class FolderWatcher:
                 self.watched_folders[parent_folder_path] = (observer, subfolder_handler, created_time)
             
             logger.info(f"Now watching parent folder {parent_folder_name} for first subfolder creation")
+            logger.info(f"_start_watching_folder completed successfully for {parent_folder_name}")
         
         except Exception as e:
             logger.error(f"Error in _start_watching_folder for {parent_folder_path}: {e}", exc_info=True)
-            
-        except Exception as e:
-            logger.error(f"Error starting to watch folder {parent_folder_path}: {e}", exc_info=True)
     
     def _watch_child_folder_for_images(self, parent_folder_path: str, parent_folder_name: str, child_folder_path: Path):
         """Watch the child folder for images, using parent folder name for processing"""
