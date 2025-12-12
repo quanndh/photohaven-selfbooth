@@ -35,5 +35,5 @@ processed/
 test_images/
 
 # Config (optional - remove if you want to track config)
-# config.yaml
+config.yaml
 
