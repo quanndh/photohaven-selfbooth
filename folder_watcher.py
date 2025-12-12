@@ -213,25 +213,30 @@ class ChildFolderImageHandler(FileSystemEventHandler):
         try:
             file_path = Path(event.src_path).resolve()
             
+            logger.debug(f"on_created event in {self.folder_name}: {file_path.name}")
+            
             # Check if it's an image file
             if not self._is_image_file(file_path):
+                logger.debug(f"File {file_path.name} is not an image file, ignoring")
                 return
             
             # Check if it's in our watched folder
             if file_path.parent.resolve() != self.folder_path.resolve():
+                logger.debug(f"File {file_path.name} not in watched folder, ignoring")
                 return
             
-            logger.debug(f"New image detected in {self.folder_name}: {file_path.name}")
+            logger.info(f"New image detected in {self.folder_name}: {file_path.name}")
             
             with self.lock:
                 file_path_str = str(file_path.resolve())
                 # Check if already processed (from initialization or previous event)
                 if file_path_str not in self.processed_files:
+                    logger.info(f"Adding image to pending queue: {file_path.name}")
                     self.pending_files[file_path_str] = time.time()
                 else:
                     logger.debug(f"Image {file_path.name} already processed, skipping")
         except Exception as e:
-            logger.debug(f"Error handling on_created in {self.folder_name}: {e}")
+            logger.error(f"Error handling on_created in {self.folder_name}: {e}", exc_info=True)
     
     def on_moved(self, event: FileSystemEvent):
         """Called when a file is moved/renamed"""
@@ -242,25 +247,30 @@ class ChildFolderImageHandler(FileSystemEventHandler):
             # event.dest_path is the new location after move
             file_path = Path(event.dest_path).resolve()
             
+            logger.debug(f"on_moved event in {self.folder_name}: {file_path.name}, parent: {file_path.parent.resolve()}, watched: {self.folder_path.resolve()}")
+            
             # Check if it's in our watched folder
             if file_path.parent.resolve() != self.folder_path.resolve():
+                logger.debug(f"File {file_path.name} not in watched folder, ignoring")
                 return
             
             # Check if it's an image file
             if not self._is_image_file(file_path):
+                logger.debug(f"File {file_path.name} is not an image file, ignoring")
                 return
             
-            logger.debug(f"Image moved to {self.folder_name}: {file_path.name}")
+            logger.info(f"Image moved/pasted to {self.folder_name}: {file_path.name}")
             
             with self.lock:
                 file_path_str = str(file_path.resolve())
                 # Check if already processed (from initialization or previous event)
                 if file_path_str not in self.processed_files:
+                    logger.info(f"Adding image to pending queue: {file_path.name}")
                     self.pending_files[file_path_str] = time.time()
                 else:
                     logger.debug(f"Image {file_path.name} already processed, skipping")
         except Exception as e:
-            logger.debug(f"Error handling on_moved in {self.folder_name}: {e}")
+            logger.error(f"Error handling on_moved in {self.folder_name}: {e}", exc_info=True)
     
     def _debounce_worker(self):
         """Worker thread that processes files after debounce period"""
@@ -604,8 +614,8 @@ class FolderWatcher:
             
             if not parent_folder.exists() or not parent_folder.is_dir():
                 logger.warning(f"Parent folder does not exist or is not a directory: {parent_folder_path}")
-            return
-        
+                return
+            
             parent_folder_name = parent_folder.name
             logger.info(f"Starting to watch parent folder for first subfolder: {parent_folder_name}")
             logger.info(f"Parent folder path: {parent_folder}")
