@@ -154,6 +154,27 @@ def main():
     lightroom_destination = Path(config.get('lightroom_destination_folder', '../lightroom-destination'))
     lightroom_destination.mkdir(parents=True, exist_ok=True)
     
+    # Check if output_base_folder exists (to avoid trying to create it later)
+    from folder_watcher import normalize_path
+    import os
+    output_base_str = config.get('output_base_folder', '../output')
+    output_base = normalize_path(output_base_str)
+    output_base_exists = output_base.exists() and output_base.is_dir()
+    
+    # Verify accessibility if it exists
+    if output_base_exists:
+        try:
+            # Try to access it
+            list(output_base.iterdir())
+            logger.info(f"Output base folder exists and is accessible: {output_base}")
+            config['_output_base_exists'] = True
+        except (OSError, PermissionError) as e:
+            logger.warning(f"Output base folder exists but is not accessible: {e}")
+            config['_output_base_exists'] = False
+    else:
+        logger.info(f"Output base folder does not exist: {output_base} (will be created when needed)")
+        config['_output_base_exists'] = False
+    
     # Initialize folder watcher (for input folders)
     try:
         watcher = FolderWatcher(str(watch_folder), None, config, processing_counter)

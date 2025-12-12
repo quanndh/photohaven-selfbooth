@@ -255,31 +255,45 @@ class LightroomDestinationWatcher:
             
             logger.debug(f"Output base folder: {output_base} (normalized from: {output_base_str})")
             
-            # Check if path is a root drive (e.g., "Z:\") - skip mkdir on root, but allow subdirectories
-            output_base_path_str = str(output_base)
-            is_root_drive = os.name == 'nt' and len(output_base_path_str) == 3 and output_base_path_str[1] == ':' and output_base_path_str[2] == '\\'
+            # Check if folder already exists (checked at startup)
+            output_base_exists = self.config.get('_output_base_exists', False)
             
-            if not is_root_drive:
-                # Not a root drive, try to create the base folder
+            if output_base_exists:
+                # Folder exists, just verify accessibility
                 try:
-                    output_base.mkdir(parents=True, exist_ok=True)
-                    logger.debug(f"Output base folder exists or created: {output_base}")
+                    list(output_base.iterdir())
+                    logger.debug(f"Output base folder exists and is accessible: {output_base}")
                 except (OSError, PermissionError) as e:
-                    logger.error(f"Cannot create output folder {output_base}: {e}")
+                    logger.error(f"Output base folder exists but is not accessible: {e}")
                     logger.error(f"Original path string: {output_base_str}")
                     return
             else:
-                # Root drive - verify it exists/accessible by trying to list it
-                # Don't try to create it (can't create root drive)
-                try:
-                    # Try to access the root drive by checking if we can list it
-                    list(output_base.iterdir())
-                    logger.debug(f"Root drive {output_base} is accessible")
-                except (OSError, PermissionError) as e:
-                    logger.error(f"Root drive {output_base} is not accessible: {e}")
-                    logger.error(f"Original path string: {output_base_str}")
-                    logger.error(f"Please ensure the drive is mapped and accessible, or use a subdirectory like 'Z:/output'")
-                    return
+                # Folder doesn't exist, try to create it
+                # Check if path is a root drive (e.g., "Z:\") - skip mkdir on root, but allow subdirectories
+                output_base_path_str = str(output_base)
+                is_root_drive = os.name == 'nt' and len(output_base_path_str) == 3 and output_base_path_str[1] == ':' and output_base_path_str[2] == '\\'
+                
+                if not is_root_drive:
+                    # Not a root drive, try to create the base folder
+                    try:
+                        output_base.mkdir(parents=True, exist_ok=True)
+                        logger.debug(f"Output base folder created: {output_base}")
+                    except (OSError, PermissionError) as e:
+                        logger.error(f"Cannot create output folder {output_base}: {e}")
+                        logger.error(f"Original path string: {output_base_str}")
+                        return
+                else:
+                    # Root drive - verify it exists/accessible by trying to list it
+                    # Don't try to create it (can't create root drive)
+                    try:
+                        # Try to access the root drive by checking if we can list it
+                        list(output_base.iterdir())
+                        logger.debug(f"Root drive {output_base} is accessible")
+                    except (OSError, PermissionError) as e:
+                        logger.error(f"Root drive {output_base} is not accessible: {e}")
+                        logger.error(f"Original path string: {output_base_str}")
+                        logger.error(f"Please ensure the drive is mapped and accessible, or use a subdirectory like 'Z:/output'")
+                        return
             
             # Create output folder structure: output_base/folder_name/processed/
             output_folder = output_base / folder_name / self.config.get('output_folder', 'processed')
