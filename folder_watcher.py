@@ -112,40 +112,33 @@ class ChildFolderImageHandler(FileSystemEventHandler):
         self.debounce_thread.start()
     
     def _initialize_existing_files(self):
-        """Process existing image files that were created recently (within last 5 seconds)"""
+        """Process all existing image files when starting to watch a folder"""
         try:
             if self.folder_path.exists():
-                current_time = time.time()
-                recent_threshold = 5  # Process files created within last 5 seconds
                 existing_files = []
                 
                 for file_path in self.folder_path.iterdir():
                     if file_path.is_file() and self._is_image_file(file_path):
                         try:
-                            # Check file modification time
-                            file_mtime = file_path.stat().st_mtime
-                            file_age = current_time - file_mtime
+                            file_path_str = str(file_path.resolve())
+                            existing_files.append(file_path_str)
+                            logger.debug(f"Found existing image in {self.folder_name}: {file_path.name}")
                             
-                            # If file is very recent (created within threshold), process it
-                            if file_age <= recent_threshold:
-                                file_path_str = str(file_path.resolve())
-                                existing_files.append(file_path_str)
-                                logger.debug(f"Found recent image in {self.folder_name}: {file_path.name} (age: {file_age:.1f}s)")
-                            else:
-                                # Old file, mark as already processed
-                                with self.lock:
-                                    self.processed_files.add(str(file_path.resolve()))
+                            # Mark as processed to avoid duplicate processing from file system events
+                            with self.lock:
+                                self.processed_files.add(file_path_str)
+                                
                         except (OSError, PermissionError) as e:
                             logger.debug(f"Could not process file {file_path}: {e}")
                             continue
                 
-                # Queue recent files for processing
+                # Queue all existing files for processing
                 for file_path_str in existing_files:
-                    logger.info(f"Queueing existing recent image for processing: {file_path_str}")
+                    logger.info(f"Queueing existing image for processing: {file_path_str}")
                     self.image_queue.put((self.folder_path, self.folder_name, file_path_str))
                 
                 if existing_files:
-                    logger.info(f"Found {len(existing_files)} recent image(s) in {self.folder_name}, queued for processing")
+                    logger.info(f"Found {len(existing_files)} existing image(s) in {self.folder_name}, queued for processing")
         except Exception as e:
             logger.warning(f"Error initializing existing files in {self.folder_name}: {e}")
     
@@ -182,9 +175,12 @@ class ChildFolderImageHandler(FileSystemEventHandler):
             logger.debug(f"New image detected in {self.folder_name}: {file_path.name}")
             
             with self.lock:
-                file_path_str = str(file_path)
+                file_path_str = str(file_path.resolve())
+                # Check if already processed (from initialization or previous event)
                 if file_path_str not in self.processed_files:
                     self.pending_files[file_path_str] = time.time()
+                else:
+                    logger.debug(f"Image {file_path.name} already processed, skipping")
         except Exception as e:
             logger.debug(f"Error handling on_created in {self.folder_name}: {e}")
     
@@ -208,9 +204,12 @@ class ChildFolderImageHandler(FileSystemEventHandler):
             logger.debug(f"Image moved to {self.folder_name}: {file_path.name}")
             
             with self.lock:
-                file_path_str = str(file_path)
+                file_path_str = str(file_path.resolve())
+                # Check if already processed (from initialization or previous event)
                 if file_path_str not in self.processed_files:
                     self.pending_files[file_path_str] = time.time()
+                else:
+                    logger.debug(f"Image {file_path.name} already processed, skipping")
         except Exception as e:
             logger.debug(f"Error handling on_moved in {self.folder_name}: {e}")
     
