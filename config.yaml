@@ -14,7 +14,12 @@ output_folder: "processed"  # Subfolder name within each folder (e.g., output/fo
 filename_separator: "___"  # Triple underscore separator
 
 # Folder watching timeout (how long to watch child folders for new images)
-folder_watch_timeout_minutes: 2  # Stop watching and delete folder after this time
+folder_watch_timeout_minutes: 20  # Stop watching and delete folder after this time
+
+# Child folder name to watch inside each parent folder
+# The system watches watch_folder for parent folders, then looks for this child folder inside each parent
+# Images are processed using the parent folder name, not the child folder name
+child_folder_name: "photos"  # Name of the subfolder to watch for images inside each parent folder
 
 # Supported image extensions
 supported_extensions:

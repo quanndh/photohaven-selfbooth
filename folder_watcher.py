@@ -455,40 +455,89 @@ class FolderWatcher:
             except Exception as e:
                 logger.error(f"Error in folder watching worker: {e}", exc_info=True)
     
-    def _start_watching_folder(self, folder_path: str):
-        """Start watching a child folder for new images"""
+    def _start_watching_folder(self, parent_folder_path: str):
+        """Start watching a parent folder for its child folder, then watch child folder for images"""
         try:
-            folder = Path(folder_path)
+            parent_folder = Path(parent_folder_path)
             
-            if not folder.exists() or not folder.is_dir():
-                logger.warning(f"Folder does not exist or is not a directory: {folder_path}")
+            if not parent_folder.exists() or not parent_folder.is_dir():
+                logger.warning(f"Parent folder does not exist or is not a directory: {parent_folder_path}")
                 return
             
-            folder_name = folder.name
-            logger.info(f"Starting to watch folder for new images: {folder_name} ({folder_path})")
+            parent_folder_name = parent_folder.name
+            child_folder_name = self.config.get('child_folder_name', 'photos')
+            child_folder_path = parent_folder / child_folder_name
             
-            # Create image handler for this folder
+            logger.info(f"Looking for child folder '{child_folder_name}' in parent folder: {parent_folder_name}")
+            
+            # Check if child folder exists, if not wait and check periodically
+            if not child_folder_path.exists():
+                logger.info(f"Child folder '{child_folder_name}' not found in {parent_folder_name}, will check periodically")
+                # Start a thread to periodically check for the child folder
+                Thread(
+                    target=self._wait_for_child_folder,
+                    daemon=True,
+                    args=(parent_folder_path, parent_folder_name, child_folder_name)
+                ).start()
+                return
+            
+            # Child folder exists, start watching it
+            self._watch_child_folder_for_images(parent_folder_path, parent_folder_name, child_folder_path)
+            
+        except Exception as e:
+            logger.error(f"Error starting to watch folder {parent_folder_path}: {e}", exc_info=True)
+    
+    def _wait_for_child_folder(self, parent_folder_path: str, parent_folder_name: str, child_folder_name: str):
+        """Periodically check for child folder to appear"""
+        parent_folder = Path(parent_folder_path)
+        child_folder_path = parent_folder / child_folder_name
+        
+        max_wait_time = self.folder_timeout_seconds  # Wait up to folder timeout
+        check_interval = 2  # Check every 2 seconds
+        waited = 0
+        
+        while waited < max_wait_time:
+            time.sleep(check_interval)
+            waited += check_interval
+            
+            if child_folder_path.exists() and child_folder_path.is_dir():
+                logger.info(f"Child folder '{child_folder_name}' found in {parent_folder_name}")
+                self._watch_child_folder_for_images(parent_folder_path, parent_folder_name, child_folder_path)
+                return
+        
+        logger.warning(f"Child folder '{child_folder_name}' not found in {parent_folder_name} within timeout period")
+    
+    def _watch_child_folder_for_images(self, parent_folder_path: str, parent_folder_name: str, child_folder_path: Path):
+        """Watch the child folder for images, using parent folder name for processing"""
+        try:
+            if not child_folder_path.exists() or not child_folder_path.is_dir():
+                logger.warning(f"Child folder does not exist or is not a directory: {child_folder_path}")
+                return
+            
+            logger.info(f"Starting to watch child folder '{child_folder_path.name}' for images in parent: {parent_folder_name}")
+            
+            # Create image handler for the child folder, but use parent folder name
             image_handler = ChildFolderImageHandler(
-                folder_path,
-                folder_name,
+                str(child_folder_path),
+                parent_folder_name,  # Use parent folder name, not child folder name
                 self.image_queue,
                 self.config
             )
             
-            # Create observer for this folder
+            # Create observer for the child folder
             observer = Observer()
-            observer.schedule(image_handler, str(folder), recursive=False)
+            observer.schedule(image_handler, str(child_folder_path), recursive=False)
             observer.start()
             
-            # Track this folder
+            # Track using parent folder path (for cleanup/deletion)
             created_time = time.time()
             with self.watched_folders_lock:
-                self.watched_folders[folder_path] = (observer, image_handler, created_time)
+                self.watched_folders[parent_folder_path] = (observer, image_handler, created_time)
             
-            logger.info(f"Now watching folder for new images: {folder_name}")
+            logger.info(f"Now watching child folder '{child_folder_path.name}' for images (using parent name: {parent_folder_name})")
             
         except Exception as e:
-            logger.error(f"Error starting to watch folder {folder_path}: {e}", exc_info=True)
+            logger.error(f"Error watching child folder {child_folder_path}: {e}", exc_info=True)
     
     def _stop_watching_folder(self, folder_path: str):
         """Stop watching a folder and delete it"""
