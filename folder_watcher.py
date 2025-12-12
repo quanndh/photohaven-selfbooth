@@ -643,22 +643,25 @@ class FolderWatcher:
     def _start_watching_folder(self, parent_folder_path: str):
         """Start watching a parent folder for the first subfolder created, then watch that subfolder for images"""
         try:
+            logger.info(f"_start_watching_folder called with: {parent_folder_path}")
             parent_folder = Path(parent_folder_path)
             
             if not parent_folder.exists() or not parent_folder.is_dir():
                 logger.warning(f"Parent folder does not exist or is not a directory: {parent_folder_path}")
-                return
-            
+            return
+        
             parent_folder_name = parent_folder.name
             logger.info(f"Starting to watch parent folder for first subfolder: {parent_folder_name}")
             logger.info(f"Parent folder path: {parent_folder}")
+            logger.info(f"Parent folder exists: {parent_folder.exists()}, is_dir: {parent_folder.is_dir()}")
             
             # Check if there's already a subfolder (with retry for pasted folders)
+            logger.info(f"Checking for existing subfolders in {parent_folder_name}")
             existing_subfolders = []
             for attempt in range(3):  # Try 3 times with delays
                 try:
                     existing_subfolders = [p for p in parent_folder.iterdir() if p.is_dir()]
-                    logger.debug(f"Attempt {attempt + 1}: Found {len(existing_subfolders)} subfolder(s) in {parent_folder_name}")
+                    logger.info(f"Attempt {attempt + 1}: Found {len(existing_subfolders)} subfolder(s) in {parent_folder_name}")
                     if existing_subfolders:
                         break
                     if attempt < 2:  # Don't sleep on last attempt
@@ -673,12 +676,15 @@ class FolderWatcher:
                 first_subfolder = existing_subfolders[0]
                 logger.info(f"Found existing subfolder in {parent_folder_name}: {first_subfolder.name}")
                 logger.info(f"Subfolder path: {first_subfolder}")
+                logger.info(f"Calling _watch_child_folder_for_images for {parent_folder_name}")
                 self._watch_child_folder_for_images(parent_folder_path, parent_folder_name, first_subfolder)
+                logger.info(f"Returning from _start_watching_folder after watching child folder")
                 return
             else:
                 logger.info(f"No existing subfolders found in {parent_folder_name}, will watch for creation")
         
             # No subfolder exists yet, watch for the first one to be created
+            logger.info(f"Creating subfolder handler for {parent_folder_name}")
             # Create handler to watch for subfolder creation
             subfolder_handler = ParentFolderSubfolderHandler(
                 parent_folder_path,
@@ -686,11 +692,13 @@ class FolderWatcher:
                 self,
                 self.config
             )
+            logger.info(f"Subfolder handler created for {parent_folder_name}")
             
             # Create observer for the parent folder (to detect subfolder creation)
             observer = Observer()
             observer.schedule(subfolder_handler, str(parent_folder), recursive=False)
             observer.start()
+            logger.info(f"Observer started for {parent_folder_name}")
             
             # Track using parent folder path
             created_time = time.time()
@@ -698,6 +706,9 @@ class FolderWatcher:
                 self.watched_folders[parent_folder_path] = (observer, subfolder_handler, created_time)
             
             logger.info(f"Now watching parent folder {parent_folder_name} for first subfolder creation")
+        
+        except Exception as e:
+            logger.error(f"Error in _start_watching_folder for {parent_folder_path}: {e}", exc_info=True)
             
         except Exception as e:
             logger.error(f"Error starting to watch folder {parent_folder_path}: {e}", exc_info=True)
